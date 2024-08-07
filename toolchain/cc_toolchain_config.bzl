@@ -41,6 +41,8 @@ def cc_toolchain_config(
         "-Wl,--build-id=md5",
         "-Wl,--hash-style=gnu",
         "-Wl,-z,relro,-z,now",
+        "-l:libstdc++.a",
+        "-lm",
     ]
     archive_flags = []
     link_libs = []
