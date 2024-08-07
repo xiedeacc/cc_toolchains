@@ -4,7 +4,7 @@ package(default_visibility = ["//visibility:public"])
 load("@bazel_skylib//rules:native_binary.bzl", "native_binary")
 load("@rules_cc//cc:defs.bzl", "cc_toolchain", "cc_toolchain_suite")
 load("@cc_toolchains//toolchain:system_module_map.bzl", "system_module_map")
-load("%@cc_toolchains//toolchain:cc_toolchain_config.bzl", "cc_toolchain_config")
+load("@cc_toolchains//toolchain:cc_toolchain_config.bzl", "cc_toolchain_config")
 
 filegroup(name = "empty")
 
@@ -14,50 +14,49 @@ filegroup(
         "bin/cc_wrapper.sh",
         %{sysroot_label_str}
         %{extra_compiler_files}
-    ]
+    ],
 )
 
 filegroup(
     name = "archiver-files-%{suffix}",
     srcs = [
         "bin/cc_wrapper.sh",
-    ]
+    ],
 )
 
 filegroup(
     name = "assembler-files-%{suffix}",
     srcs = [
         "bin/cc_wrapper.sh",
-    ]
-    srcs = [":internal-use-files"]
+    ],
 )
 
 filegroup(
     name = "compiler-files-%{suffix}",
     srcs = [
         "bin/cc_wrapper.sh",
-    ]
+    ],
 )
 
 filegroup(
     name = "linker-files-%{suffix}",
     srcs = [
         "bin/cc_wrapper.sh",
-    ]
+    ],
 )
 
 filegroup(
     name = "objcopy-files-%{suffix}",
     srcs = [
         "bin/cc_wrapper.sh",
-    ]
+    ],
 )
 
 filegroup(
     name = "strip-files-%{suffix}",
     srcs = [
         "bin/cc_wrapper.sh",
-    ]
+    ],
 )
 
 filegroup(
@@ -76,7 +75,7 @@ system_module_map(
 )
 
 toolchain(
-    name = "cc-toolchain-%{suffix}",
+    name = "toolchain-%{suffix}",
     exec_compatible_with = [
         "@platforms//cpu:x86_64",
         "@platforms//os:linux",
@@ -85,12 +84,12 @@ toolchain(
         "@platforms//cpu:%{target_arch}",
         "@platforms//os:%{target_os}",
     ],
-    toolchain = ":%{compiler}-%{suffix}",
+    toolchain = ":cc_toolchain-%{suffix}",
     toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
 )
 
 cc_toolchain(
-    name = "%{compiler}-%{suffix}",
+    name = "cc_toolchain-%{suffix}",
     all_files = ":all-files-%{suffix}",
     ar_files = ":archiver-files-%{suffix}",
     as_files = ":assembler-files-%{suffix}",

@@ -25,6 +25,7 @@ _attrs = {
         },
     ),
     "extra_compiler_files": attr.label(mandatory = False),
+    "libc": attr.string(mandatory = False, default = "glibc"),
     "cxx_builtin_include_directories": attr.string_list(mandatory = False),
     "compile_flags": attr.string_list(mandatory = False),
     "conly_flags": attr.string_list(mandatory = False),
@@ -40,7 +41,7 @@ _attrs = {
     "coverage_link_flags": attr.string_list(mandatory = False),
     "unfiltered_compile_flags": attr.string_list(mandatory = False),
     "supports_start_end_lib": attr.bool(mandatory = False, default = True),
-    "debug": attr.bool(mandatory = False, default = True),
+    "debug": attr.bool(mandatory = False, default = False),
 }
 
 def _cc_toolchain_repo_impl(rctx):
@@ -62,7 +63,9 @@ cc_toolchain_repo = repository_rule(
 )
 
 def _cc_toolchain_config_impl(rctx):
-    print(rctx.attr)
+    if rctx.attr.debug:
+        print(rctx.attr)
+
     suffix = "{}_{}_{}".format(rctx.attr.chip_model, rctx.attr.target_arch, rctx.attr.compiler)
     local_toolchain = False
     if _is_absolute_path(rctx.attr.url):
@@ -131,8 +134,8 @@ def _cc_toolchain_config_impl(rctx):
     if rctx.attr.link_flags and len(rctx.attr.link_flags) != 0:
         link_flags.extend(rctx.attr.link_flags)
         compiler_configuration["link_flags"] = _list_to_string(link_flags)
-    if rctx.attr.target_archive_flags and len(rctx.attr.target_archive_flags) != 0:
-        compiler_configuration["archive_flags"] = _list_to_string(rctx.attr.target_archive_flags)
+    if rctx.attr.archive_flags and len(rctx.attr.archive_flags) != 0:
+        compiler_configuration["archive_flags"] = _list_to_string(rctx.attr.archive_flags)
     if rctx.attr.link_libs and len(rctx.attr.link_libs) != 0:
         compiler_configuration["link_libs"] = _list_to_string(rctx.attr.link_libs)
     if rctx.attr.opt_compile_flags and len(rctx.attr.opt_compile_flags) != 0:
@@ -175,10 +178,12 @@ def _cc_toolchain_config_impl(rctx):
             "%{cxx_builtin_include_directories}": _list_to_string(cxx_builtin_include_directories),
             "%{compiler_configuration}": _dict_to_string(compiler_configuration),
             "%{tool_paths}": _dict_to_string(tool_paths),
-            "%{supports_start_end_lib}": rctx.attr.supports_start_end_lib,
+            "%{supports_start_end_lib}": str(rctx.attr.supports_start_end_lib),
             "%{sysroot_path}": sysroot_path,
         },
     )
+    if rctx.attr.debug:
+        print(rctx.read("BUILD.bazel"))
 
 cc_toolchain_config = repository_rule(
     attrs = _attrs,
@@ -216,6 +221,10 @@ def cc_toolchains_setup(name, **kwargs):
                     toolchain_args["tool_names"] = toolchain_info.get("tool_names")
                 if toolchain_info.get("extra_compiler_files"):
                     toolchain_args["extra_compiler_files"] = toolchain_info.get("extra_compiler_files")
+                if toolchain_info.get("libc"):
+                    toolchain_args["libc"] = toolchain_info.get("libc")
+                if toolchain_info.get("cxx_builtin_include_directories"):
+                    toolchain_args["cxx_builtin_include_directories"] = toolchain_info.get("cxx_builtin_include_directories")
                 if toolchain_info.get("compile_flags"):
                     toolchain_args["compile_flags"] = toolchain_info.get("compile_flags")
                 if toolchain_info.get("conly_flags"):
@@ -247,6 +256,5 @@ def cc_toolchains_setup(name, **kwargs):
                 if toolchain_info.get("debug"):
                     toolchain_args["debug"] = toolchain_info.get("debug")
 
-                print(toolchain_args)
                 cc_toolchain_repo(name = "cc_toolchain_repo_{}_{}_{}".format(chip_model, target_arch, compiler), **toolchain_args)
                 cc_toolchain_config(name = "cc_toolchain_config_{}_{}_{}".format(chip_model, target_arch, compiler), **toolchain_args)
