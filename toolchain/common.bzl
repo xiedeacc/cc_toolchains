@@ -62,6 +62,11 @@ def join(path1, path2):
 def os_bzl(os):
     return {"darwin": "osx", "linux": "linux"}[os]
 
+def label_to_string(l):
+    if l == None:
+        return "None"
+    return "\"{}\"".format(str(l))
+
 def list_to_string(ls):
     if ls == None:
         return "None"

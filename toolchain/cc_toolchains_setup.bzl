@@ -1,4 +1,17 @@
-load("//toolchain:common.bzl", "BZLMOD_ENABLED", _canonical_dir_path = "canonical_dir_path", _dict_to_string = "dict_to_string", _download = "download", _generate_build_file = "generate_build_file", _is_absolute_path = "is_absolute_path", _is_hermetic_or_exists = "is_hermetic_or_exists", _join = "join", _list_to_string = "list_to_string", _pkg_path_from_label = "pkg_path_from_label")
+load(
+    "//toolchain:common.bzl",
+    "BZLMOD_ENABLED",
+    _canonical_dir_path = "canonical_dir_path",
+    _dict_to_string = "dict_to_string",
+    _download = "download",
+    _generate_build_file = "generate_build_file",
+    _is_absolute_path = "is_absolute_path",
+    _is_hermetic_or_exists = "is_hermetic_or_exists",
+    _join = "join",
+    _label_to_string = "label_to_string",
+    _list_to_string = "list_to_string",
+    _pkg_path_from_label = "pkg_path_from_label",
+)
 
 _attrs = {
     "chip_model": attr.string(mandatory = True),
@@ -47,11 +60,11 @@ _attrs = {
 def _cc_toolchain_repo_impl(rctx):
     rctx.file(
         "BUILD.bazel",
-        content = rctx.read(Label("//toolchain:cc_toolchain_repo.tpl")),
+        content = rctx.read(Label("//toolchain:cc_toolchain_repo.BUILD.tpl")),
         executable = False,
     )
     if _is_absolute_path(rctx.attr.url):
-        return rctx.aatr
+        return rctx.attr
 
     updated_attrs = _download(rctx)
     return updated_attrs
@@ -74,6 +87,10 @@ def _cc_toolchain_config_impl(rctx):
     if not local_toolchain:
         toolchain_repo_root = ("@" if BZLMOD_ENABLED else "") + "@cc_toolchain_repo_{}//".format(suffix)
         toolchain_path_prefix = _canonical_dir_path(str(rctx.path(Label(toolchain_repo_root + ":BUILD.bazel")).dirname))
+
+    toolchain_repo_root = ("@" if BZLMOD_ENABLED else "") + "@cc_toolchain_repo_{}//".format(suffix)
+    toolchain_path_prefix = _canonical_dir_path(str(rctx.path(Label(toolchain_repo_root + ":BUILD.bazel")).dirname))
+    print(toolchain_path_prefix)
     toolchain_path_prefix = toolchain_path_prefix + rctx.attr.toolchain_prefix
     toolchain_path_prefix.replace("//", "/")
     toolchain_path_prefix = _canonical_dir_path(toolchain_path_prefix)
@@ -98,6 +115,8 @@ def _cc_toolchain_config_impl(rctx):
             sysroot_path = _pkg_path_from_label(sysroot_label)
             sysroot_label_str = "\"%s\"" % str(sysroot_label)
 
+    sysroot_label_str = Label(toolchain_repo_root + ":all_files")
+    print(sysroot_label_str)
     if sysroot_path != "":
         sysroot_prefix = "%sysroot%"
         cxx_builtin_include_directories.extend([
@@ -115,6 +134,15 @@ def _cc_toolchain_config_impl(rctx):
         print(sysroot_path)
         print(cxx_builtin_include_directories)
 
+    compile_flags = []
+
+    #compile_flags = ["-isystem " + toolchain_path_prefix + item for item in rctx.attr.cxx_builtin_include_directories]
+    #for item in rctx.attr.cxx_builtin_include_directories:
+    #compile_flags.append("-isystem")
+    #compile_flags.append(toolchain_path_prefix + item)
+
+    print(compile_flags)
+
     link_flags = [
         "-L{}lib".format(toolchain_path_prefix),
         "-B{}bin".format(toolchain_path_prefix),
@@ -126,14 +154,13 @@ def _cc_toolchain_config_impl(rctx):
 
     compiler_configuration = dict()
     if rctx.attr.compile_flags and len(rctx.attr.compile_flags) != 0:
-        compiler_configuration["compile_flags"] = _list_to_string(rctx.attr.compile_flags)
+        compile_flags.extend(rctx.attr.compile_flags)
     if rctx.attr.conly_flags and len(rctx.attr.conly_flags) != 0:
         compiler_configuration["conly_flags"] = _list_to_string(rctx.attr.conly_flags)
     if rctx.attr.cxx_flags and len(rctx.attr.cxx_flags) != 0:
         compiler_configuration["cxx_flags"] = _list_to_string(rctx.attr.cxx_flags)
     if rctx.attr.link_flags and len(rctx.attr.link_flags) != 0:
         link_flags.extend(rctx.attr.link_flags)
-        compiler_configuration["link_flags"] = _list_to_string(link_flags)
     if rctx.attr.archive_flags and len(rctx.attr.archive_flags) != 0:
         compiler_configuration["archive_flags"] = _list_to_string(rctx.attr.archive_flags)
     if rctx.attr.link_libs and len(rctx.attr.link_libs) != 0:
@@ -152,6 +179,9 @@ def _cc_toolchain_config_impl(rctx):
         compiler_configuration["coverage_link_flags"] = _list_to_string(rctx.attr.coverage_link_flags)
     if rctx.attr.unfiltered_compile_flags and len(rctx.attr.unfiltered_compile_flags) != 0:
         compiler_configuration["unfiltered_compile_flags"] = _list_to_string(rctx.attr.unfiltered_compile_flags)
+
+    compiler_configuration["link_flags"] = _list_to_string(link_flags)
+    compiler_configuration["compile_flags"] = _list_to_string(compile_flags)
 
     if rctx.attr.debug:
         print(compiler_configuration)
@@ -173,7 +203,8 @@ def _cc_toolchain_config_impl(rctx):
             "%{compiler}": rctx.attr.compiler,
             "%{target_arch}": rctx.attr.target_arch,
             "%{target_os}": rctx.attr.target_os,
-            "%{sysroot_label_str}": sysroot_label_str,
+            "%{libc}": rctx.attr.libc,
+            "%{sysroot_label_str}": _label_to_string(sysroot_label_str),
             "%{extra_compiler_files}": extra_compiler_files,
             "%{cxx_builtin_include_directories}": _list_to_string(cxx_builtin_include_directories),
             "%{compiler_configuration}": _dict_to_string(compiler_configuration),
@@ -251,10 +282,9 @@ def cc_toolchains_setup(name, **kwargs):
                     toolchain_args["coverage_link_flags"] = toolchain_info.get("coverage_link_flags")
                 if toolchain_info.get("unfiltered_compile_flags"):
                     toolchain_args["unfiltered_compile_flags"] = toolchain_info.get("unfiltered_compile_flags")
-                if toolchain_info.get("supports_start_end_lib"):
+                if toolchain_info.get("supports_start_end_lib") != None:
                     toolchain_args["supports_start_end_lib"] = toolchain_info.get("supports_start_end_lib")
-                if toolchain_info.get("debug"):
+                if toolchain_info.get("debug") != None:
                     toolchain_args["debug"] = toolchain_info.get("debug")
-
                 cc_toolchain_repo(name = "cc_toolchain_repo_{}_{}_{}".format(chip_model, target_arch, compiler), **toolchain_args)
                 cc_toolchain_config(name = "cc_toolchain_config_{}_{}_{}".format(chip_model, target_arch, compiler), **toolchain_args)

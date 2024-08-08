@@ -17,6 +17,8 @@ def cc_toolchain_config(
         "-fstack-protector",
         "-fno-omit-frame-pointer",
         "-Wall",
+        "-v",
+        #"-nostdinc",
     ]
     dbg_compile_flags = [
         "-g",
@@ -33,15 +35,22 @@ def cc_toolchain_config(
         "-ffunction-sections",
         "-fdata-sections",
     ]
-    conly_flags = []
+    conly_flags = [
+        #"-nostdinc",
+    ]
+
+    #cxx_flags = ["-std=c++17"]
     cxx_flags = ["-std=c++17"]
 
     link_flags = [
+        "-v",
         "-no-canonical-prefixes",
         "-Wl,--build-id=md5",
         "-Wl,--hash-style=gnu",
         "-Wl,-z,relro,-z,now",
-        "-l:libstdc++.a",
+        #"-l:libstdc++.a",
+        "-lstdc++",
+        "-lc",
         "-lm",
     ]
     archive_flags = []
