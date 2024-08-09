@@ -21,7 +21,7 @@ _attrs = {
     "url": attr.string(mandatory = True),
     "sha256sum": attr.string(mandatory = True),
     "sysroot": attr.string(mandatory = False),
-    "toolchain_prefix": attr.string(mandatory = False, default = ""),
+    "strip_prefix": attr.string(mandatory = False, default = ""),
     "tool_names": attr.string_dict(
         mandatory = True,
         default = {
@@ -39,6 +39,7 @@ _attrs = {
     ),
     "extra_compiler_files": attr.label(mandatory = False),
     "libc": attr.string(mandatory = False, default = "glibc"),
+    "c_builtin_include_directories": attr.string_list(mandatory = False),
     "cxx_builtin_include_directories": attr.string_list(mandatory = False),
     "compile_flags": attr.string_list(mandatory = False),
     "conly_flags": attr.string_list(mandatory = False),
@@ -57,6 +58,16 @@ _attrs = {
     "debug": attr.bool(mandatory = False, default = False),
 }
 
+# NOTICE(not finished)
+def _symlink_recursive(rctx, src, dst, offset):
+    for path in rctx.path(src).readdir():
+        if path != path.realpath:
+            continue
+        if path.is_dir():
+            _symlink_recursive(rctx, path, dst, offset)
+        else:
+            rctx.symlink(path, path.basename)
+
 def _cc_toolchain_repo_impl(rctx):
     rctx.file(
         "BUILD.bazel",
@@ -64,10 +75,14 @@ def _cc_toolchain_repo_impl(rctx):
         executable = False,
     )
     if _is_absolute_path(rctx.attr.url):
+        toolchain_dir = _canonical_dir_path(rctx.attr.url) + rctx.attr.strip_prefix
+        toolchain_dir.replace("//", "/")
+        for path in rctx.path(toolchain_dir).readdir():
+            rctx.execute(["cp", "-r", path, "."])
         return rctx.attr
 
     updated_attrs = _download(rctx)
-    return updated_attrs
+    #return updated_attrs
 
 cc_toolchain_repo = repository_rule(
     attrs = _attrs,
@@ -76,72 +91,68 @@ cc_toolchain_repo = repository_rule(
 )
 
 def _cc_toolchain_config_impl(rctx):
-    if rctx.attr.debug:
-        print(rctx.attr)
-
     suffix = "{}_{}_{}".format(rctx.attr.chip_model, rctx.attr.target_arch, rctx.attr.compiler)
-    local_toolchain = False
-    if _is_absolute_path(rctx.attr.url):
-        local_toolchain = True
-        toolchain_path_prefix = _canonical_dir_path(rctx.attr.url)
-    if not local_toolchain:
-        toolchain_repo_root = ("@" if BZLMOD_ENABLED else "") + "@cc_toolchain_repo_{}//".format(suffix)
-        toolchain_path_prefix = _canonical_dir_path(str(rctx.path(Label(toolchain_repo_root + ":BUILD.bazel")).dirname))
-
     toolchain_repo_root = ("@" if BZLMOD_ENABLED else "") + "@cc_toolchain_repo_{}//".format(suffix)
     toolchain_path_prefix = _canonical_dir_path(str(rctx.path(Label(toolchain_repo_root + ":BUILD.bazel")).dirname))
-    print(toolchain_path_prefix)
-    toolchain_path_prefix = toolchain_path_prefix + rctx.attr.toolchain_prefix
-    toolchain_path_prefix.replace("//", "/")
-    toolchain_path_prefix = _canonical_dir_path(toolchain_path_prefix)
 
     tool_paths = {}
     for k, v in rctx.attr.tool_names.items():
         tool_paths[k] = "\"{}bin/{}\"".format(toolchain_path_prefix, v)
-    if rctx.attr.debug:
-        print(tool_paths)
 
-    extra_compiler_files = ("\"%s\"," % str(rctx.attr.extra_compiler_files)) if rctx.attr.extra_compiler_files else ""
+    extra_compiler_files = _label_to_string(rctx.attr.extra_compiler_files) if rctx.attr.extra_compiler_files else ""
+    repo_all_files_label_str = _label_to_string(Label(toolchain_repo_root + ":all_files"))
 
-    cxx_builtin_include_directories = [toolchain_path_prefix + item for item in rctx.attr.cxx_builtin_include_directories]
-
-    sysroot_label_str = ""
     sysroot_path = ""
     if rctx.attr.sysroot:
         if _is_absolute_path(rctx.attr.sysroot):
             sysroot_path = rctx.attr.sysroot
         else:
-            sysroot_label = Label(rctx.attr.sysroot)
-            sysroot_path = _pkg_path_from_label(sysroot_label)
-            sysroot_label_str = "\"%s\"" % str(sysroot_label)
+            sysroot_path = _canonical_dir_path(str(rctx.path(Label(rctx.attr.sysroot)).dirname))
 
-    sysroot_label_str = Label(toolchain_repo_root + ":all_files")
-    print(sysroot_label_str)
+    c_builtin_include_directories = [toolchain_path_prefix + item for item in rctx.attr.c_builtin_include_directories]
+    cxx_builtin_include_directories = [toolchain_path_prefix + item for item in rctx.attr.cxx_builtin_include_directories]
+
     if sysroot_path != "":
         sysroot_prefix = "%sysroot%"
+        c_builtin_include_directories.extend([
+            _join(sysroot_prefix, "/include"),
+            _join(sysroot_prefix, "/usr/include"),
+            _join(sysroot_prefix, "/usr/local/include"),
+        ])
         cxx_builtin_include_directories.extend([
             _join(sysroot_prefix, "/include"),
             _join(sysroot_prefix, "/usr/include"),
             _join(sysroot_prefix, "/usr/local/include"),
         ])
 
+    c_builtin_include_directories = [
+        dir
+        for dir in c_builtin_include_directories
+        if _is_hermetic_or_exists(rctx, dir, sysroot_path)
+    ]
+
     cxx_builtin_include_directories = [
         dir
         for dir in cxx_builtin_include_directories
         if _is_hermetic_or_exists(rctx, dir, sysroot_path)
     ]
-    if rctx.attr.debug:
-        print(sysroot_path)
-        print(cxx_builtin_include_directories)
 
     compile_flags = []
+    conly_flags = []
+    cxx_flags = []
 
     #compile_flags = ["-isystem " + toolchain_path_prefix + item for item in rctx.attr.cxx_builtin_include_directories]
-    #for item in rctx.attr.cxx_builtin_include_directories:
-    #compile_flags.append("-isystem")
-    #compile_flags.append(toolchain_path_prefix + item)
+    for item in rctx.attr.c_builtin_include_directories:
+        conly_flags.append("-isystem")
+        conly_flags.append(toolchain_path_prefix + item)
 
-    print(compile_flags)
+    for item in rctx.attr.cxx_builtin_include_directories:
+        cxx_flags.append("-isystem")
+        cxx_flags.append(toolchain_path_prefix + item)
+
+    for item in rctx.attr.c_builtin_include_directories:
+        cxx_flags.append("-isystem")
+        cxx_flags.append(toolchain_path_prefix + item)
 
     link_flags = [
         "-L{}lib".format(toolchain_path_prefix),
@@ -156,9 +167,9 @@ def _cc_toolchain_config_impl(rctx):
     if rctx.attr.compile_flags and len(rctx.attr.compile_flags) != 0:
         compile_flags.extend(rctx.attr.compile_flags)
     if rctx.attr.conly_flags and len(rctx.attr.conly_flags) != 0:
-        compiler_configuration["conly_flags"] = _list_to_string(rctx.attr.conly_flags)
+        conly_flags.extend(rctx.attr.conly_flags)
     if rctx.attr.cxx_flags and len(rctx.attr.cxx_flags) != 0:
-        compiler_configuration["cxx_flags"] = _list_to_string(rctx.attr.cxx_flags)
+        cxx_flags.extend(rctx.attr.cxx_flags)
     if rctx.attr.link_flags and len(rctx.attr.link_flags) != 0:
         link_flags.extend(rctx.attr.link_flags)
     if rctx.attr.archive_flags and len(rctx.attr.archive_flags) != 0:
@@ -180,11 +191,10 @@ def _cc_toolchain_config_impl(rctx):
     if rctx.attr.unfiltered_compile_flags and len(rctx.attr.unfiltered_compile_flags) != 0:
         compiler_configuration["unfiltered_compile_flags"] = _list_to_string(rctx.attr.unfiltered_compile_flags)
 
-    compiler_configuration["link_flags"] = _list_to_string(link_flags)
     compiler_configuration["compile_flags"] = _list_to_string(compile_flags)
-
-    if rctx.attr.debug:
-        print(compiler_configuration)
+    compiler_configuration["conly_flags"] = _list_to_string(conly_flags)
+    compiler_configuration["cxx_flags"] = _list_to_string(cxx_flags)
+    compiler_configuration["link_flags"] = _list_to_string(link_flags)
 
     rctx.template(
         "bin/cc_wrapper.sh",
@@ -204,7 +214,7 @@ def _cc_toolchain_config_impl(rctx):
             "%{target_arch}": rctx.attr.target_arch,
             "%{target_os}": rctx.attr.target_os,
             "%{libc}": rctx.attr.libc,
-            "%{sysroot_label_str}": _label_to_string(sysroot_label_str),
+            "%{repo_all_files_label_str}": repo_all_files_label_str,
             "%{extra_compiler_files}": extra_compiler_files,
             "%{cxx_builtin_include_directories}": _list_to_string(cxx_builtin_include_directories),
             "%{compiler_configuration}": _dict_to_string(compiler_configuration),
@@ -246,14 +256,16 @@ def cc_toolchains_setup(name, **kwargs):
                     toolchain_args["target_os"] = toolchain_info.get("target_os")
                 if toolchain_info.get("sysroot"):
                     toolchain_args["sysroot"] = toolchain_info.get("sysroot")
-                if toolchain_info.get("toolchain_prefix"):
-                    toolchain_args["toolchain_prefix"] = toolchain_info.get("toolchain_prefix")
+                if toolchain_info.get("strip_prefix"):
+                    toolchain_args["strip_prefix"] = toolchain_info.get("strip_prefix")
                 if toolchain_info.get("tool_names"):
                     toolchain_args["tool_names"] = toolchain_info.get("tool_names")
                 if toolchain_info.get("extra_compiler_files"):
                     toolchain_args["extra_compiler_files"] = toolchain_info.get("extra_compiler_files")
                 if toolchain_info.get("libc"):
                     toolchain_args["libc"] = toolchain_info.get("libc")
+                if toolchain_info.get("c_builtin_include_directories"):
+                    toolchain_args["c_builtin_include_directories"] = toolchain_info.get("c_builtin_include_directories")
                 if toolchain_info.get("cxx_builtin_include_directories"):
                     toolchain_args["cxx_builtin_include_directories"] = toolchain_info.get("cxx_builtin_include_directories")
                 if toolchain_info.get("compile_flags"):

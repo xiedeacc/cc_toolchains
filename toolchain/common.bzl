@@ -63,9 +63,9 @@ def os_bzl(os):
     return {"darwin": "osx", "linux": "linux"}[os]
 
 def label_to_string(l):
-    if l == None:
-        return "None"
-    return "\"{}\"".format(str(l))
+    if l == None or len(str(l)) == 0:
+        return ""
+    return "\"{}\",".format(str(l))
 
 def list_to_string(ls):
     if ls == None:
@@ -90,7 +90,7 @@ def download(rctx):
     urls = [rctx.attr.url]
     res = rctx.download_and_extract(
         urls,
-        sha256sum = rctx.attr.sha256sum,
+        sha256 = rctx.attr.sha256sum,
         stripPrefix = rctx.attr.strip_prefix,
     )
     if rctx.attr.sha256sum != res.sha256:

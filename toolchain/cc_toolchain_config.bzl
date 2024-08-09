@@ -18,7 +18,7 @@ def cc_toolchain_config(
         "-fno-omit-frame-pointer",
         "-Wall",
         "-v",
-        #"-nostdinc",
+        "-nostdinc",
     ]
     dbg_compile_flags = [
         "-g",

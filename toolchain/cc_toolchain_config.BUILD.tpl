@@ -12,7 +12,7 @@ filegroup(
     name = "all-files-%{suffix}",
     srcs = [
         "bin/cc_wrapper.sh",
-        %{sysroot_label_str}
+        %{repo_all_files_label_str}
         %{extra_compiler_files}
     ],
 )
@@ -35,6 +35,7 @@ filegroup(
     name = "compiler-files-%{suffix}",
     srcs = [
         "bin/cc_wrapper.sh",
+        %{repo_all_files_label_str}
     ],
 )
 
@@ -63,7 +64,6 @@ filegroup(
     name = "include-components-%{suffix}",
     srcs = [
         ":compiler-files-%{suffix}",
-        %{sysroot_label_str}
     ],
 )
 
