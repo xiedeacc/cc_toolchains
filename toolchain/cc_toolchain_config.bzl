@@ -19,6 +19,8 @@ def cc_toolchain_config(
         "-Wall",
         "-v",
         "-nostdinc",
+        #"-nostdlib",
+        #"-nodefaultlibs",
     ]
     dbg_compile_flags = [
         "-g",
@@ -43,15 +45,8 @@ def cc_toolchain_config(
     cxx_flags = ["-std=c++17"]
 
     link_flags = [
-        "-v",
-        "-no-canonical-prefixes",
-        "-Wl,--build-id=md5",
-        "-Wl,--hash-style=gnu",
-        "-Wl,-z,relro,-z,now",
-        #"-l:libstdc++.a",
-        "-lstdc++",
-        "-lc",
-        "-lm",
+        #"-nostdlib",
+        #"-nodefaultlibs",
     ]
     archive_flags = []
     link_libs = []

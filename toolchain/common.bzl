@@ -80,6 +80,20 @@ def dict_to_string(d):
         parts.append("\"{}\": {}".format(key, value))
     return "{%s}" % ", ".join(parts)
 
+def is_cross_compiling(rctx):
+    print(rctx.os.arch)
+    print(rctx.attr.target_arch)
+    if rctx.os.arch == rctx.attr.target_arch or (rctx.os.arch == "amd64" and rctx.attr.target_arch == "x86_64"):
+        print("False")
+        return False
+    print("True")
+    return True
+
+def is_host_search_path(item):
+    if item == "/usr/include" or item == "/usr/include/x86_64-linux-gnu" or item == "/usr/local/include" or item == "/usr/local/include/x86_64-linux-gnu":
+        return True
+    return False
+
 def is_hermetic_or_exists(rctx, path, sysroot_path):
     path = path.replace("%sysroot%", sysroot_path).replace("//", "/")
     if not path.startswith("/"):
