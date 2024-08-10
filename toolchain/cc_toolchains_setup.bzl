@@ -42,7 +42,6 @@ _attrs = {
     "extra_compiler_files": attr.label(mandatory = False),
     "libc": attr.string(mandatory = False, default = "glibc"),
     "lib_directories": attr.string_list(mandatory = False),
-    "c_builtin_include_directories": attr.string_list(mandatory = False),
     "cxx_builtin_include_directories": attr.string_list(mandatory = False),
     "compile_flags": attr.string_list(mandatory = False),
     "conly_flags": attr.string_list(mandatory = False),
@@ -105,14 +104,6 @@ def _cc_toolchain_config_impl(rctx):
     extra_compiler_files = _label_to_string(rctx.attr.extra_compiler_files) if rctx.attr.extra_compiler_files else ""
     repo_all_files_label_str = _label_to_string(Label(toolchain_repo_root + ":all_files"))
 
-    c_builtin_include_directories = []
-    for item in rctx.attr.c_builtin_include_directories:
-        if _is_absolute_path(item):
-            if _is_host_search_path(item) and not _is_cross_compiling(rctx):
-                c_builtin_include_directories.append(item)
-        else:
-            c_builtin_include_directories.append(toolchain_path_prefix + item)
-
     cxx_builtin_include_directories = []
     for item in rctx.attr.cxx_builtin_include_directories:
         if _is_absolute_path(item):
@@ -129,20 +120,11 @@ def _cc_toolchain_config_impl(rctx):
             sysroot_path = _canonical_dir_path(str(rctx.path(Label(rctx.attr.sysroot)).dirname))
 
     if sysroot_path != "":
-        c_builtin_include_directories.extend([
-            _join(sysroot_path, "usr/include"),
-            _join(sysroot_path, "usr/local/include"),
-        ])
         cxx_builtin_include_directories.extend([
             _join(sysroot_path, "usr/include"),
             _join(sysroot_path, "usr/local/include"),
         ])
 
-    c_builtin_include_directories = [
-        dir
-        for dir in c_builtin_include_directories
-        if _is_hermetic_or_exists(rctx, dir, sysroot_path)
-    ]
     cxx_builtin_include_directories = [
         dir
         for dir in cxx_builtin_include_directories
@@ -152,14 +134,6 @@ def _cc_toolchain_config_impl(rctx):
     compile_flags = []
     conly_flags = []
     cxx_flags = []
-
-    #for item in cxx_builtin_include_directories:
-    #cxx_flags.append("-isystem")
-    #cxx_flags.append(item)
-
-    #for item in c_builtin_include_directories:
-    #conly_flags.append("-isystem")
-    #conly_flags.append(item)
 
     for item in cxx_builtin_include_directories:
         compile_flags.append("-isystem")
@@ -311,8 +285,6 @@ def cc_toolchains_setup(name, **kwargs):
                     toolchain_args["extra_compiler_files"] = toolchain_info.get("extra_compiler_files")
                 if toolchain_info.get("libc"):
                     toolchain_args["libc"] = toolchain_info.get("libc")
-                if toolchain_info.get("c_builtin_include_directories"):
-                    toolchain_args["c_builtin_include_directories"] = toolchain_info.get("c_builtin_include_directories")
                 if toolchain_info.get("cxx_builtin_include_directories"):
                     toolchain_args["cxx_builtin_include_directories"] = toolchain_info.get("cxx_builtin_include_directories")
                 if toolchain_info.get("lib_directories"):
