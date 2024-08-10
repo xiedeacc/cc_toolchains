@@ -153,14 +153,17 @@ def _cc_toolchain_config_impl(rctx):
     conly_flags = []
     cxx_flags = []
 
-    #compile_flags = ["-isystem " + toolchain_path_prefix + item for item in rctx.attr.cxx_builtin_include_directories]
-    for item in cxx_builtin_include_directories:
-        cxx_flags.append("-isystem")
-        cxx_flags.append(item)
+    #for item in cxx_builtin_include_directories:
+    #cxx_flags.append("-isystem")
+    #cxx_flags.append(item)
 
-    for item in c_builtin_include_directories:
-        conly_flags.append("-isystem")
-        conly_flags.append(item)
+    #for item in c_builtin_include_directories:
+    #conly_flags.append("-isystem")
+    #conly_flags.append(item)
+
+    for item in cxx_builtin_include_directories:
+        compile_flags.append("-isystem")
+        compile_flags.append(item)
 
     if not _is_cross_compiling(rctx):
         compile_flags.append("-idirafter")
