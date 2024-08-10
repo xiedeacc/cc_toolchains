@@ -136,6 +136,8 @@ def _cc_toolchain_config_impl(rctx):
     cxx_flags = []
 
     for item in cxx_builtin_include_directories:
+        if _is_absolute_path(item) and _is_host_search_path(item):
+            continue
         compile_flags.append("-isystem")
         compile_flags.append(item)
 
