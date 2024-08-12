@@ -158,54 +158,35 @@ def _cc_toolchain_config_impl(rctx):
         "-Wall",
         "-v",
         #"-nobuiltininc",
-        #"-nostdinc",
-        #"-nostdinc++",
-        "-stdlib=libc++",
     ]
-    conly_flags = []
-    cxx_flags = []
+    conly_flags = [
+        "-nostdinc",
+    ]
+
+    cxx_flags = [
+        "-nostdinc++",
+    ]
     archive_flags = []
 
-    #for item in c_builtin_include_directories:
-    ##if _is_absolute_path(item) and _is_host_search_path(item):
-    ##continue
-    #conly_flags.append("-I")
-    #conly_flags.append(item)
-
-    conly_flags.append("-isystem")
-    conly_flags.append("/usr/include")
-    conly_flags.append("-isystem")
-    conly_flags.append("/usr/include/x86_64-linux-gnu")
-
-    #compile_flags.append("-isystem")
-    #compile_flags.append("/usr/include")
-    #compile_flags.append("-isystem")
-    #compile_flags.append("/usr/include/x86_64-linux-gnu")
-
-    #for item in cxx_builtin_include_directories:
-    ##if _is_absolute_path(item) and _is_host_search_path(item):
-    ##continue
-    #compile_flags.append("-isystem")
-    #compile_flags.append(item)
+    for item in c_builtin_include_directories:
+        if _is_host_search_path(item):
+            continue
+        if _is_cxx_search_path(item):
+            continue
+        conly_flags.append("-isystem")
+        conly_flags.append(item)
 
     for item in cxx_builtin_include_directories:
+        if _is_host_search_path(item):
+            continue
         cxx_flags.append("-isystem")
         cxx_flags.append(item)
-        #if _is_absolute_path(item) and _is_host_search_path(item):
-        #continue
-        #if _is_cxx_search_path(item):
-        #cxx_flags.append("-isystem")
-        #cxx_flags.append(item)
 
-        #else:
-        #compile_flags.append("-isystem")
-        #compile_flags.append(item)
-
-    #if not _is_cross_compiling(rctx):
-    #compile_flags.append("-idirafter")
-    #compile_flags.append("/usr/include")
-    #compile_flags.append("-idirafter")
-    #compile_flags.append("/usr/include/x86_64-linux-gnu")
+    if not _is_cross_compiling(rctx):
+        compile_flags.append("-idirafter")
+        compile_flags.append("/usr/include/x86_64-linux-gnu")
+        compile_flags.append("-idirafter")
+        compile_flags.append("/usr/include")
 
     lib_directories = []
     for item in rctx.attr.lib_directories:
@@ -236,8 +217,9 @@ def _cc_toolchain_config_impl(rctx):
     if rctx.attr.compiler == "clang":
         link_flags.append("-fuse-ld=lld")
         link_flags.append("-rtlib=compiler-rt")
-        conly_flags.append("-isystem")
-        conly_flags.append(toolchain_path_prefix + "lib/clang/18/include")
+        link_flags.append("-stdlib=libc++")
+        if not _is_cross_compiling(rctx):
+            sysroot_path = ""
     elif rctx.attr.compiler == "gcc" and rctx.attr.chip_model != "rockchip":
         link_flags.append("-fuse-ld=bfd")
 
