@@ -118,7 +118,7 @@ def _cc_toolchain_config_impl(rctx):
             if _is_host_search_path(item) and not _is_cross_compiling(rctx):
                 c_builtin_include_directories.append(item)
         else:
-            c_builtin_include_directories.append(toolchain_path_prefix + item)
+            c_builtin_include_directories.append(sysroot_path + item)
 
     cxx_builtin_include_directories = []
     for item in rctx.attr.cxx_builtin_include_directories:
@@ -126,7 +126,7 @@ def _cc_toolchain_config_impl(rctx):
             if _is_host_search_path(item) and not _is_cross_compiling(rctx):
                 cxx_builtin_include_directories.append(item)
         else:
-            cxx_builtin_include_directories.append(toolchain_path_prefix + item)
+            cxx_builtin_include_directories.append(sysroot_path + item)
 
     if sysroot_path != "":
         c_builtin_include_directories.extend([
@@ -137,6 +137,8 @@ def _cc_toolchain_config_impl(rctx):
             _join(sysroot_path, "usr/include"),
             _join(sysroot_path, "usr/local/include"),
         ])
+    else:
+        fail("sysroot_path empty, set sysroot if cross compiling, else set to toolchain root")
 
     c_builtin_include_directories = [dir for dir in c_builtin_include_directories if _is_hermetic_or_exists(rctx, dir, sysroot_path)]
     cxx_builtin_include_directories = [dir for dir in cxx_builtin_include_directories if _is_hermetic_or_exists(rctx, dir, sysroot_path)]
@@ -168,7 +170,7 @@ def _cc_toolchain_config_impl(rctx):
     link_flags = [
         "-v",
         "-B{}bin".format(toolchain_path_prefix),
-        "-L{}lib".format(toolchain_path_prefix),
+        "-L{}lib".format(sysroot_path),
         "-Wl,--build-id=md5",
         "-Wl,--hash-style=gnu",
         "-Wl,-z,relro,-z,now",
@@ -214,7 +216,7 @@ def _cc_toolchain_config_impl(rctx):
         if _is_absolute_path(item):
             lib_directories.append(item)
         else:
-            lib_directories.append(toolchain_path_prefix + item)
+            lib_directories.append(sysroot_path + item)
 
     lib_directories = [dir for dir in lib_directories if _is_hermetic_or_exists(rctx, dir, sysroot_path)]
 
@@ -233,12 +235,12 @@ def _cc_toolchain_config_impl(rctx):
         link_flags.append("-Wl,--pop-state")
         if not _is_cross_compiling(rctx):
             link_libs.append("-Wl,--push-state,-as-needed")
-            link_libs.append("{}lib/clang/18/lib/x86_64-unknown-linux-gnu/libclang_rt.builtins.a".format(toolchain_path_prefix))
+            link_libs.append("{}lib/clang/18/lib/x86_64-unknown-linux-gnu/libclang_rt.builtins.a".format(sysroot_path))
             link_libs.append("-Wl,--pop-state")
-        elif rctx.attr.target_arch == "x86_64":
+        elif rctx.attr.target_arch == "aarch64":
             compile_flags.append("--target=aarch64-unknown-linux-gnu")
             link_libs.append("-Wl,--push-state,-as-needed")
-            link_libs.append("{}lib/clang/18/lib/aarch64-unknown-linux-gnu/libclang_rt.builtins.a".format(toolchain_path_prefix))
+            link_libs.append("{}lib/clang/18/lib/aarch64-unknown-linux-gnu/libclang_rt.builtins.a".format(sysroot_path))
     elif rctx.attr.compiler == "gcc":
         link_libs.append("-Wl,--push-state,-as-needed")
         link_libs.append("-lstdc++")
