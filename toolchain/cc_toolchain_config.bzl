@@ -12,6 +12,19 @@ def cc_toolchain_config(
         compiler_configuration,
         supports_start_end_lib,
         sysroot_path):
+    compile_flags = []
+    dbg_compile_flags = []
+    opt_compile_flags = []
+    conly_flags = []
+    cxx_flags = []
+    link_flags = []
+    archive_flags = []
+    link_libs = []
+    opt_link_flags = []
+    coverage_compile_flags = []
+    coverage_link_flags = []
+    unfiltered_compile_flags = []
+
     if compiler_configuration.get("compile_flags") != None and len(compiler_configuration.get("compile_flags")) != 0:
         compile_flags.extend(compiler_configuration["compile_flags"])
 

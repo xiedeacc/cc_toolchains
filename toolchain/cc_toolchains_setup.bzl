@@ -54,7 +54,6 @@ _attrs = {
     "opt_compile_flags": attr.string_list(mandatory = False),
     "opt_link_flags": attr.string_list(mandatory = False),
     "dbg_compile_flags": attr.string_list(mandatory = False),
-    "dbg_link_flags": attr.string_list(mandatory = False),
     "coverage_compile_flags": attr.string_list(mandatory = False),
     "coverage_link_flags": attr.string_list(mandatory = False),
     "unfiltered_compile_flags": attr.string_list(mandatory = False),
@@ -106,6 +105,13 @@ def _cc_toolchain_config_impl(rctx):
     extra_compiler_files = _label_to_string(rctx.attr.extra_compiler_files) if rctx.attr.extra_compiler_files else ""
     repo_all_files_label_str = _label_to_string(Label(toolchain_repo_root + ":all_files"))
 
+    sysroot_path = ""
+    if rctx.attr.sysroot and len(rctx.attr.sysroot) > 0:
+        if _is_absolute_path(rctx.attr.sysroot):
+            sysroot_path = _canonical_dir_path(rctx.attr.sysroot)
+        else:
+            sysroot_path = _canonical_dir_path(str(rctx.path(Label(rctx.attr.sysroot)).dirname))
+
     c_builtin_include_directories = []
     for item in rctx.attr.c_builtin_include_directories:
         if _is_absolute_path(item):
@@ -121,13 +127,6 @@ def _cc_toolchain_config_impl(rctx):
                 cxx_builtin_include_directories.append(item)
         else:
             cxx_builtin_include_directories.append(toolchain_path_prefix + item)
-
-    sysroot_path = ""
-    if rctx.attr.sysroot and len(rctx.attr.sysroot) > 0:
-        if _is_absolute_path(rctx.attr.sysroot):
-            sysroot_path = _canonical_dir_path(rctx.attr.sysroot)
-        else:
-            sysroot_path = _canonical_dir_path(str(rctx.path(Label(rctx.attr.sysroot)).dirname))
 
     if sysroot_path != "":
         c_builtin_include_directories.extend([
@@ -149,7 +148,6 @@ def _cc_toolchain_config_impl(rctx):
         "-Wall",
         #"-v",
     ]
-
     dbg_compile_flags = [
         "-g",
         "-fstack-protector",
@@ -167,19 +165,30 @@ def _cc_toolchain_config_impl(rctx):
     ]
     conly_flags = ["-nostdinc"]
     cxx_flags = ["-nostdinc++", "-std=c++17"]
+    link_flags = [
+        "-v",
+        "-B{}bin".format(toolchain_path_prefix),
+        "-L{}lib".format(toolchain_path_prefix),
+        "-Wl,--build-id=md5",
+        "-Wl,--hash-style=gnu",
+        "-Wl,-z,relro,-z,now",
+        "-Wl,-no-as-needed",
+        "-lc",
+        "-lm",
+    ]
     archive_flags = []
     link_libs = []
-
     opt_link_flags = ["-Wl,--gc-sections"]
+    coverage_compile_flags = ["--coverage"]
+    coverage_link_flags = ["--coverage"]
     unfiltered_compile_flags = [
         "-no-canonical-prefixes",
         "-Wno-builtin-macro-redefined",
-        "-D__DATE__=\"redacted\"",
-        "-D__TIMESTAMP__=\"redacted\"",
-        "-D__TIME__=\"redacted\"",
+        "-D__DATE__=redacted",
+        "-D__TIMESTAMP__=redacted",
+        "-D__TIME__=redacted",
     ]
-    coverage_compile_flags = ["--coverage"]
-    coverage_link_flags = ["--coverage"]
+
     for item in c_builtin_include_directories:
         if _is_host_search_path(item):
             continue
@@ -209,18 +218,6 @@ def _cc_toolchain_config_impl(rctx):
 
     lib_directories = [dir for dir in lib_directories if _is_hermetic_or_exists(rctx, dir, sysroot_path)]
 
-    link_flags = [
-        "-v",
-        "-B{}bin".format(toolchain_path_prefix),
-        "-L{}lib".format(toolchain_path_prefix),
-        "-Wl,--build-id=md5",
-        "-Wl,--hash-style=gnu",
-        "-Wl,-z,relro,-z,now",
-        "-Wl,-no-as-needed",
-        "-lc",
-        "-lm",
-    ]
-
     for item in lib_directories:
         link_flags.append("-L{}".format(item))
         link_flags.append("-Wl,-rpath,{}".format(item))
@@ -229,59 +226,80 @@ def _cc_toolchain_config_impl(rctx):
         link_flags.append("-fuse-ld=lld")
         link_flags.append("-rtlib=compiler-rt")
         link_flags.append("-stdlib=libc++")
+        link_flags.append("-Wl,--push-state,-as-needed")
+        link_flags.append("-lc++")
+        link_flags.append("-lc++abi")
+        link_flags.append("-lunwind")
+        link_flags.append("-Wl,--pop-state")
         if not _is_cross_compiling(rctx):
-            sysroot_path = ""
             link_libs.append("-Wl,--push-state,-as-needed")
-            link_libs.append("{}/lib/clang/18/lib/aarch64-unknown-linux-gnu/libclang_rt.builtins.a".format(toolchain_path_prefix))
-            link_libs.append("{}/lib/aarch64-unknown-linux-gnu/libunwind.a".format(toolchain_path_prefix))
-            link_libs.append("{}/lib/aarch64-unknown-linux-gnu/libc++.a".format(toolchain_path_prefix))
-            link_libs.append("{}/lib/aarch64-unknown-linux-gnu/libc++abi.a".format(toolchain_path_prefix))
+            link_libs.append("{}lib/clang/18/lib/x86_64-unknown-linux-gnu/libclang_rt.builtins.a".format(toolchain_path_prefix))
             link_libs.append("-Wl,--pop-state")
-        elif rctx.attr.target_arch == "aarch64":
+        elif rctx.attr.target_arch == "x86_64":
             compile_flags.append("--target=aarch64-unknown-linux-gnu")
-            link_libs.append("{}/lib/clang/18/lib/aarch64-unknown-linux-gnu/libclang_rt.builtins.a".format(toolchain_path_prefix))
-            link_libs.append("{}/lib/aarch64-unknown-linux-gnu/libunwind.a".format(toolchain_path_prefix))
-            link_libs.append("{}/lib/aarch64-unknown-linux-gnu/libc++.a".format(toolchain_path_prefix))
-            link_libs.append("{}/lib/aarch64-unknown-linux-gnu/libc++abi.a".format(toolchain_path_prefix))
-    elif rctx.attr.compiler == "gcc" and rctx.attr.chip_model != "rockchip":
-        link_flags.append("-fuse-ld=bfd")
+            link_libs.append("-Wl,--push-state,-as-needed")
+            link_libs.append("{}lib/clang/18/lib/aarch64-unknown-linux-gnu/libclang_rt.builtins.a".format(toolchain_path_prefix))
+    elif rctx.attr.compiler == "gcc":
+        link_libs.append("-Wl,--push-state,-as-needed")
+        link_libs.append("-lstdc++")
+        link_libs.append("-lstdc++fs")
+        link_libs.append("-Wl,--pop-state")
+        if rctx.attr.chip_model != "rockchip":
+            link_flags.append("-fuse-ld=bfd")
 
     if not _is_cross_compiling(rctx):
         link_flags.append("-B/usr/lib/x86_64-linux-gnu")
+        sysroot_path = ""
 
     compiler_configuration = dict()
     if rctx.attr.compile_flags and len(rctx.attr.compile_flags) != 0:
         compile_flags.extend(rctx.attr.compile_flags)
+
     if rctx.attr.conly_flags and len(rctx.attr.conly_flags) != 0:
         conly_flags.extend(rctx.attr.conly_flags)
+
     if rctx.attr.cxx_flags and len(rctx.attr.cxx_flags) != 0:
         cxx_flags.extend(rctx.attr.cxx_flags)
+
     if rctx.attr.link_flags and len(rctx.attr.link_flags) != 0:
         link_flags.extend(rctx.attr.link_flags)
+
     if rctx.attr.archive_flags and len(rctx.attr.archive_flags) != 0:
         archive_flags.extend(rctx.attr.archive_flags)
+
     if rctx.attr.link_libs and len(rctx.attr.link_libs) != 0:
-        compiler_configuration["link_libs"] = _list_to_string(rctx.attr.link_libs)
+        link_libs.extend(compiler_configuration["link_libs"])
+
     if rctx.attr.opt_compile_flags and len(rctx.attr.opt_compile_flags) != 0:
-        compiler_configuration["opt_compile_flags"] = _list_to_string(rctx.attr.opt_compile_flags)
+        opt_compile_flags.extend(compiler_configuration["opt_compile_flags"])
+
     if rctx.attr.opt_link_flags and len(rctx.attr.opt_link_flags) != 0:
-        compiler_configuration["opt_link_flags"] = _list_to_string(rctx.attr.opt_link_flags)
+        opt_link_flags.extend(compiler_configuration["opt_link_flags"])
+
     if rctx.attr.dbg_compile_flags and len(rctx.attr.dbg_compile_flags) != 0:
-        compiler_configuration["dbg_compile_flags"] = _list_to_string(rctx.attr.dbg_compile_flags)
-    if rctx.attr.dbg_link_flags and len(rctx.attr.dbg_link_flags) != 0:
-        compiler_configuration["dbg_link_flags"] = _list_to_string(rctx.attr.dbg_link_flags)
+        dbg_compile_flags.extend(compiler_configuration["dbg_compile_flags"])
+
     if rctx.attr.coverage_compile_flags and len(rctx.attr.coverage_compile_flags) != 0:
-        compiler_configuration["coverage_compile_flags"] = _list_to_string(rctx.attr.coverage_compile_flags)
+        coverage_compile_flags.extend(compiler_configuration["coverage_compile_flags"])
+
     if rctx.attr.coverage_link_flags and len(rctx.attr.coverage_link_flags) != 0:
-        compiler_configuration["coverage_link_flags"] = _list_to_string(rctx.attr.coverage_link_flags)
+        coverage_link_flags.extend(compiler_configuration["coverage_link_flags"])
+
     if rctx.attr.unfiltered_compile_flags and len(rctx.attr.unfiltered_compile_flags) != 0:
-        compiler_configuration["unfiltered_compile_flags"] = _list_to_string(rctx.attr.unfiltered_compile_flags)
+        unfiltered_compile_flags.extend(compiler_configuration["unfiltered_compile_flags"])
 
     compiler_configuration["compile_flags"] = _list_to_string(compile_flags)
+    compiler_configuration["dbg_compile_flags"] = _list_to_string(dbg_compile_flags)
+    compiler_configuration["opt_compile_flags"] = _list_to_string(opt_compile_flags)
     compiler_configuration["conly_flags"] = _list_to_string(conly_flags)
     compiler_configuration["cxx_flags"] = _list_to_string(cxx_flags)
-    compiler_configuration["archive_flags"] = _list_to_string(archive_flags)
     compiler_configuration["link_flags"] = _list_to_string(link_flags)
+    compiler_configuration["archive_flags"] = _list_to_string(archive_flags)
+    compiler_configuration["link_libs"] = _list_to_string(link_libs)
+    compiler_configuration["opt_link_flags"] = _list_to_string(opt_link_flags)
+    compiler_configuration["coverage_compile_flags"] = _list_to_string(coverage_compile_flags)
+    compiler_configuration["coverage_link_flags"] = _list_to_string(coverage_link_flags)
+    compiler_configuration["unfiltered_compile_flags"] = _list_to_string(unfiltered_compile_flags)
 
     rctx.template(
         "bin/cc_wrapper.sh",
@@ -375,8 +393,6 @@ def cc_toolchains_setup(name, **kwargs):
                     toolchain_args["opt_link_flags"] = toolchain_info.get("opt_link_flags")
                 if toolchain_info.get("dbg_compile_flags"):
                     toolchain_args["dbg_compile_flags"] = toolchain_info.get("dbg_compile_flags")
-                if toolchain_info.get("dbg_link_flags"):
-                    toolchain_args["dbg_link_flags"] = toolchain_info.get("dbg_link_flags")
                 if toolchain_info.get("coverage_compile_flags"):
                     toolchain_args["coverage_compile_flags"] = toolchain_info.get("coverage_compile_flags")
                 if toolchain_info.get("coverage_link_flags"):
