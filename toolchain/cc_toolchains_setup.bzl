@@ -239,6 +239,7 @@ def _cc_toolchain_config_impl(rctx):
             link_libs.append("-Wl,--pop-state")
         elif rctx.attr.target_arch == "aarch64":
             compile_flags.append("--target=aarch64-unknown-linux-gnu")
+            link_flags.append("--target=aarch64-unknown-linux-gnu")
             link_libs.append("-Wl,--push-state,-as-needed")
             link_libs.append("{}lib/clang/18/lib/aarch64-unknown-linux-gnu/libclang_rt.builtins.a".format(sysroot_path))
     elif rctx.attr.compiler == "gcc":
