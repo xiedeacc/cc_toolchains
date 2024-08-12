@@ -166,7 +166,7 @@ def _cc_toolchain_config_impl(rctx):
         "-fdata-sections",
     ]
     conly_flags = ["-nostdinc"]
-    cxx_flags = ["-nostdinc++", "-std=c++17"]
+    cxx_flags = ["-nostdinc", "-nostdinc++", "-std=c++17"]
     link_flags = [
         "-v",
         "-B{}bin".format(toolchain_path_prefix),
