@@ -12,44 +12,6 @@ def cc_toolchain_config(
         compiler_configuration,
         supports_start_end_lib,
         sysroot_path):
-    compile_flags = []
-    dbg_compile_flags = [
-        "-g",
-        "-fstack-protector",
-        "-fstandalone-debug",
-        "-fno-omit-frame-pointer",
-        "-Wall",
-    ]
-    opt_compile_flags = [
-        "-g0",
-        "-O2",
-        "-D_FORTIFY_SOURCE=1",
-        "-DNDEBUG",
-        "-ffunction-sections",
-        "-fdata-sections",
-    ]
-    conly_flags = [
-    ]
-
-    #cxx_flags = ["-std=c++17"]
-    cxx_flags = ["-std=c++17"]
-
-    link_flags = [
-    ]
-    archive_flags = []
-    link_libs = []
-
-    opt_link_flags = ["-Wl,--gc-sections"]
-    unfiltered_compile_flags = [
-        "-no-canonical-prefixes",
-        "-Wno-builtin-macro-redefined",
-        "-D__DATE__=\"redacted\"",
-        "-D__TIMESTAMP__=\"redacted\"",
-        "-D__TIME__=\"redacted\"",
-    ]
-    coverage_compile_flags = ["--coverage"]
-    coverage_link_flags = ["--coverage"]
-
     if compiler_configuration.get("compile_flags") != None and len(compiler_configuration.get("compile_flags")) != 0:
         compile_flags.extend(compiler_configuration["compile_flags"])
 

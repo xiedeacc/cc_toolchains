@@ -90,9 +90,7 @@ def is_cross_compiling(rctx):
     print(rctx.os.arch)
     print(rctx.attr.target_arch)
     if rctx.os.arch == rctx.attr.target_arch or (rctx.os.arch == "amd64" and rctx.attr.target_arch == "x86_64"):
-        print("False")
         return False
-    print("True")
     return True
 
 def is_host_search_path(item):

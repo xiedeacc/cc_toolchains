@@ -123,7 +123,7 @@ def _cc_toolchain_config_impl(rctx):
             cxx_builtin_include_directories.append(toolchain_path_prefix + item)
 
     sysroot_path = ""
-    if rctx.attr.sysroot:
+    if rctx.attr.sysroot and len(rctx.attr.sysroot) > 0:
         if _is_absolute_path(rctx.attr.sysroot):
             sysroot_path = _canonical_dir_path(rctx.attr.sysroot)
         else:
@@ -139,35 +139,47 @@ def _cc_toolchain_config_impl(rctx):
             _join(sysroot_path, "usr/local/include"),
         ])
 
-    c_builtin_include_directories = [
-        dir
-        for dir in c_builtin_include_directories
-        if _is_hermetic_or_exists(rctx, dir, sysroot_path)
-    ]
-    cxx_builtin_include_directories = [
-        dir
-        for dir in cxx_builtin_include_directories
-        if _is_hermetic_or_exists(rctx, dir, sysroot_path)
-    ]
+    c_builtin_include_directories = [dir for dir in c_builtin_include_directories if _is_hermetic_or_exists(rctx, dir, sysroot_path)]
+    cxx_builtin_include_directories = [dir for dir in cxx_builtin_include_directories if _is_hermetic_or_exists(rctx, dir, sysroot_path)]
 
     compile_flags = [
-        #"--target=x86_64-linux-gnu",
         "-U_FORTIFY_SOURCE",  # https://github.com/google/sanitizers/issues/247
         "-fstack-protector",
         "-fno-omit-frame-pointer",
         "-Wall",
-        "-v",
-        #"-nobuiltininc",
-    ]
-    conly_flags = [
-        "-nostdinc",
+        #"-v",
     ]
 
-    cxx_flags = [
-        "-nostdinc++",
+    dbg_compile_flags = [
+        "-g",
+        "-fstack-protector",
+        "-fstandalone-debug",
+        "-fno-omit-frame-pointer",
+        "-Wall",
     ]
+    opt_compile_flags = [
+        "-g0",
+        "-O2",
+        "-D_FORTIFY_SOURCE=1",
+        "-DNDEBUG",
+        "-ffunction-sections",
+        "-fdata-sections",
+    ]
+    conly_flags = ["-nostdinc"]
+    cxx_flags = ["-nostdinc++", "-std=c++17"]
     archive_flags = []
+    link_libs = []
 
+    opt_link_flags = ["-Wl,--gc-sections"]
+    unfiltered_compile_flags = [
+        "-no-canonical-prefixes",
+        "-Wno-builtin-macro-redefined",
+        "-D__DATE__=\"redacted\"",
+        "-D__TIMESTAMP__=\"redacted\"",
+        "-D__TIME__=\"redacted\"",
+    ]
+    coverage_compile_flags = ["--coverage"]
+    coverage_link_flags = ["--coverage"]
     for item in c_builtin_include_directories:
         if _is_host_search_path(item):
             continue
@@ -195,11 +207,7 @@ def _cc_toolchain_config_impl(rctx):
         else:
             lib_directories.append(toolchain_path_prefix + item)
 
-    lib_directories = [
-        dir
-        for dir in lib_directories
-        if _is_hermetic_or_exists(rctx, dir, sysroot_path)
-    ]
+    lib_directories = [dir for dir in lib_directories if _is_hermetic_or_exists(rctx, dir, sysroot_path)]
 
     link_flags = [
         "-v",
@@ -209,10 +217,13 @@ def _cc_toolchain_config_impl(rctx):
         "-Wl,--hash-style=gnu",
         "-Wl,-z,relro,-z,now",
         "-Wl,-no-as-needed",
-        "-lstdc++",
         "-lc",
         "-lm",
     ]
+
+    for item in lib_directories:
+        link_flags.append("-L{}".format(item))
+        link_flags.append("-Wl,-rpath,{}".format(item))
 
     if rctx.attr.compiler == "clang":
         link_flags.append("-fuse-ld=lld")
@@ -220,15 +231,23 @@ def _cc_toolchain_config_impl(rctx):
         link_flags.append("-stdlib=libc++")
         if not _is_cross_compiling(rctx):
             sysroot_path = ""
+            link_libs.append("-Wl,--push-state,-as-needed")
+            link_libs.append("{}/lib/clang/18/lib/aarch64-unknown-linux-gnu/libclang_rt.builtins.a".format(toolchain_path_prefix))
+            link_libs.append("{}/lib/aarch64-unknown-linux-gnu/libunwind.a".format(toolchain_path_prefix))
+            link_libs.append("{}/lib/aarch64-unknown-linux-gnu/libc++.a".format(toolchain_path_prefix))
+            link_libs.append("{}/lib/aarch64-unknown-linux-gnu/libc++abi.a".format(toolchain_path_prefix))
+            link_libs.append("-Wl,--pop-state")
+        elif rctx.attr.target_arch == "aarch64":
+            compile_flags.append("--target=aarch64-unknown-linux-gnu")
+            link_libs.append("{}/lib/clang/18/lib/aarch64-unknown-linux-gnu/libclang_rt.builtins.a".format(toolchain_path_prefix))
+            link_libs.append("{}/lib/aarch64-unknown-linux-gnu/libunwind.a".format(toolchain_path_prefix))
+            link_libs.append("{}/lib/aarch64-unknown-linux-gnu/libc++.a".format(toolchain_path_prefix))
+            link_libs.append("{}/lib/aarch64-unknown-linux-gnu/libc++abi.a".format(toolchain_path_prefix))
     elif rctx.attr.compiler == "gcc" and rctx.attr.chip_model != "rockchip":
         link_flags.append("-fuse-ld=bfd")
 
     if not _is_cross_compiling(rctx):
         link_flags.append("-B/usr/lib/x86_64-linux-gnu")
-
-    for item in lib_directories:
-        link_flags.append("-L{}".format(item))
-        link_flags.append("-Wl,-rpath,{}".format(item))
 
     compiler_configuration = dict()
     if rctx.attr.compile_flags and len(rctx.attr.compile_flags) != 0:
