@@ -12,16 +12,7 @@ def cc_toolchain_config(
         compiler_configuration,
         supports_start_end_lib,
         sysroot_path):
-    compile_flags = [
-        "-U_FORTIFY_SOURCE",  # https://github.com/google/sanitizers/issues/247
-        "-fstack-protector",
-        "-fno-omit-frame-pointer",
-        "-Wall",
-        "-v",
-        "-nostdinc",
-        #"-nostdlib",
-        #"-nodefaultlibs",
-    ]
+    compile_flags = []
     dbg_compile_flags = [
         "-g",
         "-fstack-protector",
@@ -38,15 +29,12 @@ def cc_toolchain_config(
         "-fdata-sections",
     ]
     conly_flags = [
-        #"-nostdinc",
     ]
 
     #cxx_flags = ["-std=c++17"]
     cxx_flags = ["-std=c++17"]
 
     link_flags = [
-        #"-nostdlib",
-        #"-nodefaultlibs",
     ]
     archive_flags = []
     link_libs = []
@@ -59,8 +47,8 @@ def cc_toolchain_config(
         "-D__TIMESTAMP__=\"redacted\"",
         "-D__TIME__=\"redacted\"",
     ]
-    coverage_compile_flags = ["-fprofile-instr-generate", "-fcoverage-mapping"]
-    coverage_link_flags = ["-fprofile-instr-generate"]
+    coverage_compile_flags = ["--coverage"]
+    coverage_link_flags = ["--coverage"]
 
     if compiler_configuration.get("compile_flags") != None and len(compiler_configuration.get("compile_flags")) != 0:
         compile_flags.extend(compiler_configuration["compile_flags"])

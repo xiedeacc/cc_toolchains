@@ -9,6 +9,11 @@ load("@cc_toolchains//toolchain:cc_toolchain_config.bzl", "cc_toolchain_config")
 filegroup(name = "empty")
 
 filegroup(
+    name = "cc_wrapper",
+    srcs = ["bin/cc_wrapper.sh"],
+)
+
+filegroup(
     name = "all-files-%{suffix}",
     srcs = [
         "bin/cc_wrapper.sh",
@@ -98,8 +103,10 @@ cc_toolchain(
     objcopy_files = ":objcopy-files-%{suffix}",
     strip_files = ":strip-files-%{suffix}",
     toolchain_config = ":local-%{suffix}",
-    #module_map = ":modulemap-%{suffix}",
     dwp_files = ":empty",
+    #module_map = ":modulemap-%{suffix}",
+    #supports_header_parsing = 1,
+    #supports_param_files = 1,
 )
 
 cc_toolchain_config(

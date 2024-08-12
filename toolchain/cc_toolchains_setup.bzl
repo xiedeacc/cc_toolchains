@@ -7,6 +7,7 @@ load(
     _generate_build_file = "generate_build_file",
     _is_absolute_path = "is_absolute_path",
     _is_cross_compiling = "is_cross_compiling",
+    _is_cxx_search_path = "is_cxx_search_path",
     _is_hermetic_or_exists = "is_hermetic_or_exists",
     _is_host_search_path = "is_host_search_path",
     _join = "join",
@@ -42,6 +43,7 @@ _attrs = {
     "extra_compiler_files": attr.label(mandatory = False),
     "libc": attr.string(mandatory = False, default = "glibc"),
     "lib_directories": attr.string_list(mandatory = False),
+    "c_builtin_include_directories": attr.string_list(mandatory = False),
     "cxx_builtin_include_directories": attr.string_list(mandatory = False),
     "compile_flags": attr.string_list(mandatory = False),
     "conly_flags": attr.string_list(mandatory = False),
@@ -104,6 +106,14 @@ def _cc_toolchain_config_impl(rctx):
     extra_compiler_files = _label_to_string(rctx.attr.extra_compiler_files) if rctx.attr.extra_compiler_files else ""
     repo_all_files_label_str = _label_to_string(Label(toolchain_repo_root + ":all_files"))
 
+    c_builtin_include_directories = []
+    for item in rctx.attr.c_builtin_include_directories:
+        if _is_absolute_path(item):
+            if _is_host_search_path(item) and not _is_cross_compiling(rctx):
+                c_builtin_include_directories.append(item)
+        else:
+            c_builtin_include_directories.append(toolchain_path_prefix + item)
+
     cxx_builtin_include_directories = []
     for item in rctx.attr.cxx_builtin_include_directories:
         if _is_absolute_path(item):
@@ -120,32 +130,82 @@ def _cc_toolchain_config_impl(rctx):
             sysroot_path = _canonical_dir_path(str(rctx.path(Label(rctx.attr.sysroot)).dirname))
 
     if sysroot_path != "":
+        c_builtin_include_directories.extend([
+            _join(sysroot_path, "usr/include"),
+            _join(sysroot_path, "usr/local/include"),
+        ])
         cxx_builtin_include_directories.extend([
             _join(sysroot_path, "usr/include"),
             _join(sysroot_path, "usr/local/include"),
         ])
 
+    c_builtin_include_directories = [
+        dir
+        for dir in c_builtin_include_directories
+        if _is_hermetic_or_exists(rctx, dir, sysroot_path)
+    ]
     cxx_builtin_include_directories = [
         dir
         for dir in cxx_builtin_include_directories
         if _is_hermetic_or_exists(rctx, dir, sysroot_path)
     ]
 
-    compile_flags = []
+    compile_flags = [
+        "--target=x86_64-linux-gnu",
+        "-U_FORTIFY_SOURCE",  # https://github.com/google/sanitizers/issues/247
+        "-fstack-protector",
+        "-fno-omit-frame-pointer",
+        "-Wall",
+        "-v",
+        #"-nobuiltininc",
+        #"-nostdinc",
+        #"-nostdinc++",
+        "-stdlib=libc++",
+    ]
     conly_flags = []
     cxx_flags = []
+    archive_flags = []
+
+    #for item in c_builtin_include_directories:
+    ##if _is_absolute_path(item) and _is_host_search_path(item):
+    ##continue
+    #conly_flags.append("-I")
+    #conly_flags.append(item)
+
+    conly_flags.append("-isystem")
+    conly_flags.append("/usr/include")
+    conly_flags.append("-isystem")
+    conly_flags.append("/usr/include/x86_64-linux-gnu")
+
+    #compile_flags.append("-isystem")
+    #compile_flags.append("/usr/include")
+    #compile_flags.append("-isystem")
+    #compile_flags.append("/usr/include/x86_64-linux-gnu")
+
+    #for item in cxx_builtin_include_directories:
+    ##if _is_absolute_path(item) and _is_host_search_path(item):
+    ##continue
+    #compile_flags.append("-isystem")
+    #compile_flags.append(item)
 
     for item in cxx_builtin_include_directories:
-        if _is_absolute_path(item) and _is_host_search_path(item):
-            continue
-        compile_flags.append("-isystem")
-        compile_flags.append(item)
+        cxx_flags.append("-isystem")
+        cxx_flags.append(item)
+        #if _is_absolute_path(item) and _is_host_search_path(item):
+        #continue
+        #if _is_cxx_search_path(item):
+        #cxx_flags.append("-isystem")
+        #cxx_flags.append(item)
 
-    if not _is_cross_compiling(rctx):
-        compile_flags.append("-idirafter")
-        compile_flags.append("/usr/include")
-        compile_flags.append("-idirafter")
-        compile_flags.append("/usr/include/x86_64-linux-gnu")
+        #else:
+        #compile_flags.append("-isystem")
+        #compile_flags.append(item)
+
+    #if not _is_cross_compiling(rctx):
+    #compile_flags.append("-idirafter")
+    #compile_flags.append("/usr/include")
+    #compile_flags.append("-idirafter")
+    #compile_flags.append("/usr/include/x86_64-linux-gnu")
 
     lib_directories = []
     for item in rctx.attr.lib_directories:
@@ -162,13 +222,12 @@ def _cc_toolchain_config_impl(rctx):
 
     link_flags = [
         "-v",
-        #"-fuse-ld=bfd",
         "-B{}bin".format(toolchain_path_prefix),
         "-L{}lib".format(toolchain_path_prefix),
-        "-no-canonical-prefixes",
         "-Wl,--build-id=md5",
         "-Wl,--hash-style=gnu",
         "-Wl,-z,relro,-z,now",
+        "-Wl,-no-as-needed",
         "-lstdc++",
         "-lc",
         "-lm",
@@ -176,6 +235,9 @@ def _cc_toolchain_config_impl(rctx):
 
     if rctx.attr.compiler == "clang":
         link_flags.append("-fuse-ld=lld")
+        link_flags.append("-rtlib=compiler-rt")
+        conly_flags.append("-isystem")
+        conly_flags.append(toolchain_path_prefix + "lib/clang/18/include")
     elif rctx.attr.compiler == "gcc" and rctx.attr.chip_model != "rockchip":
         link_flags.append("-fuse-ld=bfd")
 
@@ -196,7 +258,7 @@ def _cc_toolchain_config_impl(rctx):
     if rctx.attr.link_flags and len(rctx.attr.link_flags) != 0:
         link_flags.extend(rctx.attr.link_flags)
     if rctx.attr.archive_flags and len(rctx.attr.archive_flags) != 0:
-        compiler_configuration["archive_flags"] = _list_to_string(rctx.attr.archive_flags)
+        archive_flags.extend(rctx.attr.archive_flags)
     if rctx.attr.link_libs and len(rctx.attr.link_libs) != 0:
         compiler_configuration["link_libs"] = _list_to_string(rctx.attr.link_libs)
     if rctx.attr.opt_compile_flags and len(rctx.attr.opt_compile_flags) != 0:
@@ -217,6 +279,7 @@ def _cc_toolchain_config_impl(rctx):
     compiler_configuration["compile_flags"] = _list_to_string(compile_flags)
     compiler_configuration["conly_flags"] = _list_to_string(conly_flags)
     compiler_configuration["cxx_flags"] = _list_to_string(cxx_flags)
+    compiler_configuration["archive_flags"] = _list_to_string(archive_flags)
     compiler_configuration["link_flags"] = _list_to_string(link_flags)
 
     rctx.template(
@@ -287,6 +350,8 @@ def cc_toolchains_setup(name, **kwargs):
                     toolchain_args["extra_compiler_files"] = toolchain_info.get("extra_compiler_files")
                 if toolchain_info.get("libc"):
                     toolchain_args["libc"] = toolchain_info.get("libc")
+                if toolchain_info.get("c_builtin_include_directories"):
+                    toolchain_args["c_builtin_include_directories"] = toolchain_info.get("c_builtin_include_directories")
                 if toolchain_info.get("cxx_builtin_include_directories"):
                     toolchain_args["cxx_builtin_include_directories"] = toolchain_info.get("cxx_builtin_include_directories")
                 if toolchain_info.get("lib_directories"):

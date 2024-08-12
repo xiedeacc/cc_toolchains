@@ -80,6 +80,12 @@ def dict_to_string(d):
         parts.append("\"{}\": {}".format(key, value))
     return "{%s}" % ", ".join(parts)
 
+def is_cxx_search_path(path):
+    if "/c++/" in path:
+        return True
+    else:
+        return False
+
 def is_cross_compiling(rctx):
     print(rctx.os.arch)
     print(rctx.attr.target_arch)
