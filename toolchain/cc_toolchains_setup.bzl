@@ -151,7 +151,7 @@ def _cc_toolchain_config_impl(rctx):
     ]
 
     compile_flags = [
-        "--target=x86_64-linux-gnu",
+        #"--target=x86_64-linux-gnu",
         "-U_FORTIFY_SOURCE",  # https://github.com/google/sanitizers/issues/247
         "-fstack-protector",
         "-fno-omit-frame-pointer",
