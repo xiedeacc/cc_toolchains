@@ -324,6 +324,7 @@ def cc_toolchains_setup(name, **kwargs):
     for target_arch, target_arch_info in toolchains.items():
         for target_os, target_os_infos in target_arch_info.items():
             for target_distro_info in target_os_infos:
+                toolchain_args = {}
                 if not target_distro_info.get("url"):
                     fail("must have url")
                 if not _is_absolute_path(target_distro_info.get("url")) and not target_distro_info.get("sha256sum"):
