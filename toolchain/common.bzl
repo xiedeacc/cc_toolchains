@@ -87,7 +87,7 @@ def is_cxx_search_path(path):
         return False
 
 def is_cross_compiling(rctx):
-    if rctx.os.arch == rctx.attr.target_arch or (rctx.os.arch == "amd64" and rctx.attr.target_arch == "x86_64"):
+    if rctx.os.name == rctx.attr.target_os and (rctx.os.arch == rctx.attr.target_arch or (rctx.os.arch == "amd64" and rctx.attr.target_arch == "x86_64")):
         return False
     return True
 
