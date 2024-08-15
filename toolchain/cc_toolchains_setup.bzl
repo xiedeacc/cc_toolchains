@@ -83,11 +83,12 @@ def _cc_toolchain_config_impl(rctx):
         fail("sysroot_path empty, set sysroot if cross compiling, else set to toolchain root")
 
     compile_flags = [
+        "-B{}bin".format(toolchain_path_prefix),
         "-U_FORTIFY_SOURCE",  # https://github.com/google/sanitizers/issues/247
         "-fstack-protector",
         "-fno-omit-frame-pointer",
         "-Wall",
-        #"-v",
+        "-v",
     ]
     dbg_compile_flags = [
         "-g",
@@ -107,7 +108,7 @@ def _cc_toolchain_config_impl(rctx):
     conly_flags = ["-nostdinc"]
     cxx_flags = ["-nostdinc", "-nostdinc++", "-std=c++17"]
     link_flags = [
-        #"-v",
+        "-v",
         "-B{}bin".format(toolchain_path_prefix),
         "-L{}lib".format(sysroot_path),
         "-Wl,--build-id=md5",
@@ -130,7 +131,7 @@ def _cc_toolchain_config_impl(rctx):
         "-D__TIME__=redacted",
     ]
 
-    system_include_directories
+    system_include_directories = []
     c_builtin_include_directories = []
     cxx_builtin_include_directories = []
     for item in rctx.attr.cxx_builtin_include_directories:
@@ -180,6 +181,9 @@ def _cc_toolchain_config_impl(rctx):
         compile_flags.append("-idirafter")
         compile_flags.append(sysroot_path + item)
 
+    cxx_builtin_include_directories.extend(c_builtin_include_directories)
+    cxx_builtin_include_directories.extend(system_include_directories)
+
     lib_directories = []
     for item in rctx.attr.lib_directories:
         if _is_absolute_path(item):
@@ -218,8 +222,8 @@ def _cc_toolchain_config_impl(rctx):
         link_libs.append("-lstdc++")
         link_libs.append("-lstdc++fs")
         link_libs.append("-Wl,--pop-state")
-        if rctx.attr.target_distro != "openwrt":
-            link_flags.append("-fuse-ld=bfd")
+        #if rctx.attr.target_distro != "openwrt":
+        #link_flags.append("-fuse-ld=bfd")
 
     if not _is_cross_compiling(rctx):
         link_flags.append("-B/usr/lib/x86_64-linux-gnu")
