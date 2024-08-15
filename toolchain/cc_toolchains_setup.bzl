@@ -88,7 +88,7 @@ def _cc_toolchain_config_impl(rctx):
         "-fstack-protector",
         "-fno-omit-frame-pointer",
         "-Wall",
-        "-v",
+        #"-v",
     ]
     dbg_compile_flags = [
         "-g",
@@ -108,7 +108,7 @@ def _cc_toolchain_config_impl(rctx):
     conly_flags = ["-nostdinc"]
     cxx_flags = ["-nostdinc", "-nostdinc++", "-std=c++17"]
     link_flags = [
-        "-v",
+        #"-v",
         "-B{}bin".format(toolchain_path_prefix),
         "-L{}lib".format(sysroot_path),
     ]
