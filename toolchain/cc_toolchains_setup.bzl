@@ -111,18 +111,22 @@ def _cc_toolchain_config_impl(rctx):
         "-v",
         "-B{}bin".format(toolchain_path_prefix),
         "-L{}lib".format(sysroot_path),
-        "-Wl,--build-id=md5",
-        "-Wl,--hash-style=gnu",
-        "-Wl,-z,relro,-z,now",
-        "-Wl,-no-as-needed",
-        "-lc",
-        "-lm",
     ]
     archive_flags = []
     link_libs = []
-    opt_link_flags = ["-Wl,--gc-sections"]
+    opt_link_flags = []
     coverage_compile_flags = ["--coverage"]
     coverage_link_flags = ["--coverage"]
+    if rctx.attr.target_os != "osx":
+        link_flags.extend([
+            "-lc",
+            "-lm",
+            "-Wl,--build-id=md5",
+            "-Wl,--hash-style=gnu",
+            "-Wl,-z,relro,-z,now",
+            "-Wl,-no-as-needed",
+        ])
+        opt_link_flags.append("-Wl,--gc-sections")
     unfiltered_compile_flags = [
         "-no-canonical-prefixes",
         "-Wno-builtin-macro-redefined",
@@ -218,10 +222,10 @@ def _cc_toolchain_config_impl(rctx):
             compile_flags.append("--target=aarch64-unknown-linux-gnu")
             link_flags.append("--target=aarch64-unknown-linux-gnu")
     elif rctx.attr.compiler == "gcc":
-        link_libs.append("-Wl,--push-state,-as-needed")
+        link_flags.append("-fuse-ld=lld")
+        link_flags.append("-stdlib=libstdc++")
         link_libs.append("-lstdc++")
         link_libs.append("-lstdc++fs")
-        link_libs.append("-Wl,--pop-state")
         #if rctx.attr.target_distro != "openwrt":
         #link_flags.append("-fuse-ld=bfd")
 

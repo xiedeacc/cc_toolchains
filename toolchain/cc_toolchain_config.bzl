@@ -1,4 +1,4 @@
-load("@bazel_tools//tools/cpp:unix_cc_toolchain_config.bzl", unix_cc_toolchain_config = "cc_toolchain_config")
+load("@cc_toolchains//toolchain:unix_cc_toolchain_config.bzl", unix_cc_toolchain_config = "cc_toolchain_config")
 
 def cc_toolchain_config(
         name,
