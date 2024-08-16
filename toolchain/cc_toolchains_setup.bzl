@@ -88,7 +88,7 @@ def _cc_toolchain_config_impl(rctx):
         "-fstack-protector",
         "-fno-omit-frame-pointer",
         "-Wall",
-        #"-v",
+        "-v",
     ]
     dbg_compile_flags = [
         "-g",
@@ -108,7 +108,7 @@ def _cc_toolchain_config_impl(rctx):
     conly_flags = ["-nostdinc"]
     cxx_flags = ["-nostdinc", "-nostdinc++", "-std=c++17"]
     link_flags = [
-        #"-v",
+        "-v",
         "-B{}bin".format(toolchain_path_prefix),
         "-L{}lib".format(sysroot_path),
     ]
@@ -140,13 +140,13 @@ def _cc_toolchain_config_impl(rctx):
     cxx_builtin_include_directories = []
     for item in rctx.attr.cxx_builtin_include_directories:
         if _is_absolute_path(item):
-            if _is_system_include_directory(item, rctx.attr.triple):
+            if _is_system_include_directory(rctx, item, rctx.attr.triple):
                 system_include_directories.append(item)
                 continue
             c_builtin_include_directories.append(item)
             cxx_builtin_include_directories.append(item)
         else:
-            if _is_system_include_directory(item, rctx.attr.triple):
+            if _is_system_include_directory(rctx, item, rctx.attr.triple):
                 system_include_directories.append(toolchain_path_prefix + item)
                 continue
             if not _is_cxx_search_path(item):
@@ -155,13 +155,13 @@ def _cc_toolchain_config_impl(rctx):
 
     for item in rctx.attr.sysroot_include_directories:
         if _is_absolute_path(item):
-            if _is_system_include_directory(item, rctx.attr.triple):
+            if _is_system_include_directory(rctx, item, rctx.attr.triple):
                 system_include_directories.append(item)
                 continue
             c_builtin_include_directories.append(item)
             cxx_builtin_include_directories.append(item)
         else:
-            if _is_system_include_directory(item, rctx.attr.triple):
+            if _is_system_include_directory(rctx, item, rctx.attr.triple):
                 system_include_directories.append(sysroot_path + item)
                 continue
             if not _is_cxx_search_path(item):
@@ -182,8 +182,12 @@ def _cc_toolchain_config_impl(rctx):
         cxx_flags.append("-isystem")
         cxx_flags.append(item)
     for item in rctx.attr.sysroot_include_directories:
-        compile_flags.append("-idirafter")
-        compile_flags.append(sysroot_path + item)
+        #compile_flags.append("-idirafter")
+        #conly_flags.append("-isystem")
+        conly_flags.append("-idirafter")
+        conly_flags.append(sysroot_path + item)
+        #compile_flags.append("-isystem")
+        #compile_flags.append(sysroot_path + item)
 
     cxx_builtin_include_directories.extend(c_builtin_include_directories)
     cxx_builtin_include_directories.extend(system_include_directories)

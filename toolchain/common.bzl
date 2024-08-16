@@ -39,10 +39,13 @@ def is_cross_compiling(rctx):
         return False
     return True
 
-def is_system_include_directory(item, triple):
+def is_system_include_directory(rctx, item, triple):
     triple_search_path = "usr/include/{}".format(triple)
+    if rctx.attr.target_os == "osx" and "System/Library/Frameworks" in item:
+        return True
     if "usr/include" in item or triple_search_path in item:
         return True
+
     return False
 
 def exists(rctx, path):
