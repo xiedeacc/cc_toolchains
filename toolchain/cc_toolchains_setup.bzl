@@ -209,8 +209,10 @@ def _cc_toolchain_config_impl(rctx):
     if rctx.attr.compiler == "clang":
         link_flags.append("-fuse-ld=lld")
         link_flags.append("-rtlib=compiler-rt")
+
         link_flags.append("-stdlib=libc++")
         link_flags.append("-Wl,--push-state,-as-needed")
+
         link_flags.append("-lc++")
         link_flags.append("-lc++abi")
         link_flags.append("-lunwind")
