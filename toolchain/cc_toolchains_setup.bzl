@@ -105,28 +105,34 @@ def _cc_toolchain_config_impl(rctx):
         "-ffunction-sections",
         "-fdata-sections",
     ]
-    conly_flags = ["-nostdinc"]
-    cxx_flags = ["-nostdinc", "-nostdinc++", "-std=c++17"]
+    conly_flags = []
+    cxx_flags = ["-std=c++17"]
     link_flags = [
-        #"-v",
+        "-v",
         "-B{}bin".format(toolchain_path_prefix),
-        "-L{}lib".format(sysroot_path),
+        "-lc",
+        "-lm",
     ]
+    if _is_cross_compiling(rctx):
+        conly_flags.append("-nostdinc")
+        cxx_flags.append("-nostdinc")
+        cxx_flags.append("-nostdinc++")
+        link_flags.append("-nostdlib")
     archive_flags = []
     link_libs = []
     opt_link_flags = []
     coverage_compile_flags = ["--coverage"]
     coverage_link_flags = ["--coverage"]
+
     if rctx.attr.target_os != "osx":
         link_flags.extend([
-            "-lc",
-            "-lm",
             "-Wl,--build-id=md5",
             "-Wl,--hash-style=gnu",
             "-Wl,-z,relro,-z,now",
             "-Wl,-no-as-needed",
         ])
         opt_link_flags.append("-Wl,--gc-sections")
+
     unfiltered_compile_flags = [
         "-no-canonical-prefixes",
         "-Wno-builtin-macro-redefined",
@@ -181,9 +187,9 @@ def _cc_toolchain_config_impl(rctx):
     for item in cxx_builtin_include_directories:
         cxx_flags.append("-isystem")
         cxx_flags.append(item)
-    for item in rctx.attr.sysroot_include_directories:
+    for item in system_include_directories:
         compile_flags.append("-idirafter")
-        compile_flags.append(sysroot_path + item)
+        compile_flags.append(item)
 
     cxx_builtin_include_directories.extend(c_builtin_include_directories)
     cxx_builtin_include_directories.extend(system_include_directories)
@@ -200,36 +206,46 @@ def _cc_toolchain_config_impl(rctx):
         else:
             lib_directories.append(sysroot_path + item)
 
-    lib_directories = [dir for dir in lib_directories if _exists(rctx, dir)]
+    if _is_cross_compiling(rctx) and rctx.attr.target_os != "osx":
+        link_flags.append("-fuse-ld=lld")
 
+    lib_directories = [dir for dir in lib_directories if _exists(rctx, dir)]
+    print(lib_directories)
     for item in lib_directories:
         link_flags.append("-L{}".format(item))
-        link_flags.append("-Wl,-rpath,{}".format(item))
+        if not _is_cross_compiling(rctx):
+            link_flags.append("-Wl,-rpath,{}".format(item))
 
     if rctx.attr.compiler == "clang":
-        link_flags.append("-fuse-ld=lld")
         link_flags.append("-rtlib=compiler-rt")
-
         link_flags.append("-stdlib=libc++")
-        link_flags.append("-Wl,--push-state,-as-needed")
 
+        if rctx.attr.supports_start_end_lib:
+            link_flags.append("-Wl,--push-state,-as-needed")
         link_flags.append("-lc++")
         link_flags.append("-lc++abi")
         link_flags.append("-lunwind")
-        link_flags.append("-Wl,--pop-state")
-        link_libs.append("-Wl,--push-state,-as-needed")
+        if rctx.attr.supports_start_end_lib:
+            link_flags.append("-Wl,--pop-state")
+
+        if rctx.attr.supports_start_end_lib:
+            link_libs.append("-Wl,--push-state,-as-needed")
         link_libs.append("{}lib/clang/18/lib/{}/libclang_rt.builtins.a".format(sysroot_path, rctx.attr.triple))
-        link_libs.append("-Wl,--pop-state")
+        if rctx.attr.supports_start_end_lib:
+            link_libs.append("-Wl,--pop-state")
+
         if _is_cross_compiling(rctx):
-            compile_flags.append("--target=aarch64-unknown-linux-gnu")
-            link_flags.append("--target=aarch64-unknown-linux-gnu")
+            compile_flags.append("--target={}".format(rctx.attr.triple))
+
+            #link_flags.append("--target={}".format(rctx.attr.triple))
+            link_flags.append("--target=x86_64-apple-darwin")
     elif rctx.attr.compiler == "gcc":
-        link_flags.append("-fuse-ld=lld")
-        link_flags.append("-stdlib=libstdc++")
+        if rctx.attr.supports_start_end_lib:
+            link_flags.append("-Wl,--push-state,-as-needed")
         link_libs.append("-lstdc++")
         link_libs.append("-lstdc++fs")
-        #if rctx.attr.target_distro != "openwrt":
-        #link_flags.append("-fuse-ld=bfd")
+        if rctx.attr.supports_start_end_lib:
+            link_flags.append("-Wl,--pop-state")
 
     if not _is_cross_compiling(rctx):
         link_flags.append("-B/usr/lib/x86_64-linux-gnu")
