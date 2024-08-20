@@ -87,7 +87,7 @@ def _cc_toolchain_config_impl(rctx):
         "-fstack-protector",
         "-fno-omit-frame-pointer",
         "-Wall",
-        #"-v",
+        "-v",
     ]
     dbg_compile_flags = [
         "-g",
@@ -113,6 +113,7 @@ def _cc_toolchain_config_impl(rctx):
         "-lm",
     ]
     if _is_cross_compiling(rctx):
+        compile_flags.append("-nostdinc")
         conly_flags.append("-nostdinc")
         cxx_flags.append("-nostdinc")
         cxx_flags.append("-nostdinc++")
@@ -186,16 +187,14 @@ def _cc_toolchain_config_impl(rctx):
     for item in c_builtin_include_directories:
         conly_flags.append("-isystem")
         conly_flags.append(item)
-        #compile_flags.append("-idirafter")
-        #compile_flags.append(item)
+        compile_flags.append("-idirafter")
+        compile_flags.append(item)
 
     for item in cxx_builtin_include_directories:
         cxx_flags.append("-isystem")
         cxx_flags.append(item)
     for item in system_include_directories:
         compile_flags.append("-idirafter")
-
-        #compile_flags.append("-isystem")
         compile_flags.append(item)
 
     cxx_builtin_include_directories.extend(c_builtin_include_directories)
