@@ -6,6 +6,7 @@ def is_absolute_path(path):
     return path and path[0] == "/" and (len(path) == 1 or path[1] != "/")
 
 def canonical_dir_path(path):
+    path = path.replace("//", "/")
     if not path.endswith("/"):
         return path + "/"
     return path

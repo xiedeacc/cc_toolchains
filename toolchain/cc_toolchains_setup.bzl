@@ -27,9 +27,9 @@ _attrs = {
     "tool_names": attr.string_dict(mandatory = True),
     "extra_compiler_files": attr.label(mandatory = False),
     "cxx_builtin_include_directories": attr.string_list(mandatory = False),
-    "lib_directories": attr.string_list(mandatory = False),
     "sysroot_include_directories": attr.string_list(mandatory = False),
     "sysroot_lib_directories": attr.string_list(mandatory = False),
+    "lib_directories": attr.string_list(mandatory = False),
     "compile_flags": attr.string_list(mandatory = False),
     "conly_flags": attr.string_list(mandatory = False),
     "cxx_flags": attr.string_list(mandatory = False),
@@ -54,7 +54,6 @@ def _cc_toolchain_repo_impl(rctx):
     )
     if _is_absolute_path(rctx.attr.url):
         toolchain_dir = _canonical_dir_path(rctx.attr.url) + rctx.attr.strip_prefix
-        toolchain_dir.replace("//", "/")
         for path in rctx.path(toolchain_dir).readdir():
             rctx.execute(["cp", "-r", path, "."])
         return rctx.attr
@@ -108,7 +107,7 @@ def _cc_toolchain_config_impl(rctx):
     conly_flags = []
     cxx_flags = ["-std=c++17"]
     link_flags = [
-        "-v",
+        #"-v",
         "-B{}bin".format(toolchain_path_prefix),
         "-lc",
         "-lm",
@@ -118,8 +117,11 @@ def _cc_toolchain_config_impl(rctx):
         cxx_flags.append("-nostdinc")
         cxx_flags.append("-nostdinc++")
         link_flags.append("-nostdlib")
+
+    if _is_cross_compiling(rctx) and rctx.attr.target_os != "osx":
+        link_flags.append("-fuse-ld=lld")
+
     archive_flags = []
-    link_libs = []
     opt_link_flags = []
     coverage_compile_flags = ["--coverage"]
     coverage_link_flags = ["--coverage"]
@@ -184,16 +186,21 @@ def _cc_toolchain_config_impl(rctx):
     for item in c_builtin_include_directories:
         conly_flags.append("-isystem")
         conly_flags.append(item)
+        #compile_flags.append("-idirafter")
+        #compile_flags.append(item)
+
     for item in cxx_builtin_include_directories:
         cxx_flags.append("-isystem")
         cxx_flags.append(item)
     for item in system_include_directories:
         compile_flags.append("-idirafter")
+
+        #compile_flags.append("-isystem")
         compile_flags.append(item)
 
     cxx_builtin_include_directories.extend(c_builtin_include_directories)
     cxx_builtin_include_directories.extend(system_include_directories)
-
+    print(cxx_builtin_include_directories)
     lib_directories = []
     for item in rctx.attr.lib_directories:
         if _is_absolute_path(item):
@@ -206,9 +213,7 @@ def _cc_toolchain_config_impl(rctx):
         else:
             lib_directories.append(sysroot_path + item)
 
-    if _is_cross_compiling(rctx) and rctx.attr.target_os != "osx":
-        link_flags.append("-fuse-ld=lld")
-
+    lib_directories = [_canonical_dir_path(dir) for dir in lib_directories]
     lib_directories = [dir for dir in lib_directories if _exists(rctx, dir)]
     print(lib_directories)
     for item in lib_directories:
@@ -216,10 +221,26 @@ def _cc_toolchain_config_impl(rctx):
         if not _is_cross_compiling(rctx):
             link_flags.append("-Wl,-rpath,{}".format(item))
 
+    link_libs = []
+    for item in rctx.attr.link_libs:
+        if _is_absolute_path(item):
+            if _exists(rctx, item):
+                link_libs.append(item)
+        else:
+            for dir in lib_directories:
+                if _exists(rctx, dir + item):
+                    link_libs.append(item)
+    print(link_libs)
+    #for item in link_libs:
+    #if rctx.attr.supports_start_end_lib:
+    #link_flags.append("-Wl,--push-state,-as-needed")
+    #link_flags.append(item)
+    #if rctx.attr.supports_start_end_lib:
+    #link_flags.append("-Wl,--pop-state")
+
     if rctx.attr.compiler == "clang":
         link_flags.append("-rtlib=compiler-rt")
         link_flags.append("-stdlib=libc++")
-
         if rctx.attr.supports_start_end_lib:
             link_flags.append("-Wl,--push-state,-as-needed")
         link_flags.append("-lc++")
@@ -228,17 +249,9 @@ def _cc_toolchain_config_impl(rctx):
         if rctx.attr.supports_start_end_lib:
             link_flags.append("-Wl,--pop-state")
 
-        if rctx.attr.supports_start_end_lib:
-            link_libs.append("-Wl,--push-state,-as-needed")
-        link_libs.append("{}lib/clang/18/lib/{}/libclang_rt.builtins.a".format(sysroot_path, rctx.attr.triple))
-        if rctx.attr.supports_start_end_lib:
-            link_libs.append("-Wl,--pop-state")
-
         if _is_cross_compiling(rctx):
             compile_flags.append("--target={}".format(rctx.attr.triple))
-
-            #link_flags.append("--target={}".format(rctx.attr.triple))
-            link_flags.append("--target=x86_64-apple-darwin")
+            link_flags.append("--target={}".format(rctx.attr.triple))
     elif rctx.attr.compiler == "gcc":
         if rctx.attr.supports_start_end_lib:
             link_flags.append("-Wl,--push-state,-as-needed")
@@ -266,9 +279,6 @@ def _cc_toolchain_config_impl(rctx):
 
     if rctx.attr.archive_flags and len(rctx.attr.archive_flags) != 0:
         archive_flags.extend(rctx.attr.archive_flags)
-
-    if rctx.attr.link_libs and len(rctx.attr.link_libs) != 0:
-        link_libs.extend(compiler_configuration["link_libs"])
 
     if rctx.attr.opt_compile_flags and len(rctx.attr.opt_compile_flags) != 0:
         opt_compile_flags.extend(compiler_configuration["opt_compile_flags"])
@@ -384,14 +394,14 @@ def cc_toolchains_setup(name, **kwargs):
                 if target_distro_info.get("cxx_builtin_include_directories"):
                     toolchain_args["cxx_builtin_include_directories"] = target_distro_info.get("cxx_builtin_include_directories")
 
-                if target_distro_info.get("lib_directories"):
-                    toolchain_args["lib_directories"] = target_distro_info.get("lib_directories")
-
                 if target_distro_info.get("sysroot_include_directories"):
                     toolchain_args["sysroot_include_directories"] = target_distro_info.get("sysroot_include_directories")
 
                 if target_distro_info.get("sysroot_lib_directories"):
                     toolchain_args["sysroot_lib_directories"] = target_distro_info.get("sysroot_lib_directories")
+
+                if target_distro_info.get("lib_directories"):
+                    toolchain_args["lib_directories"] = target_distro_info.get("lib_directories")
 
                 if target_distro_info.get("compile_flags"):
                     toolchain_args["compile_flags"] = target_distro_info.get("compile_flags")
