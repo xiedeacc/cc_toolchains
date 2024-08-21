@@ -87,7 +87,7 @@ def _cc_toolchain_config_impl(rctx):
         "-fstack-protector",
         "-fno-omit-frame-pointer",
         "-Wall",
-        "-v",
+        #"-v",
     ]
     dbg_compile_flags = [
         "-g",
@@ -119,7 +119,7 @@ def _cc_toolchain_config_impl(rctx):
         cxx_flags.append("-nostdinc++")
         link_flags.append("-nostdlib")
 
-    if _is_cross_compiling(rctx) and rctx.attr.target_os != "osx":
+    if rctx.attr.target_os != "osx":
         link_flags.append("-fuse-ld=lld")
 
     archive_flags = []
@@ -180,9 +180,6 @@ def _cc_toolchain_config_impl(rctx):
     system_include_directories = [dir for dir in system_include_directories if _exists(rctx, dir)]
     c_builtin_include_directories = [dir for dir in c_builtin_include_directories if _exists(rctx, dir)]
     cxx_builtin_include_directories = [dir for dir in cxx_builtin_include_directories if _exists(rctx, dir)]
-    print(system_include_directories)
-    print(c_builtin_include_directories)
-    print(cxx_builtin_include_directories)
 
     for item in c_builtin_include_directories:
         conly_flags.append("-isystem")
@@ -199,7 +196,7 @@ def _cc_toolchain_config_impl(rctx):
 
     cxx_builtin_include_directories.extend(c_builtin_include_directories)
     cxx_builtin_include_directories.extend(system_include_directories)
-    print(cxx_builtin_include_directories)
+
     lib_directories = []
     for item in rctx.attr.lib_directories:
         if _is_absolute_path(item):
@@ -214,7 +211,6 @@ def _cc_toolchain_config_impl(rctx):
 
     lib_directories = [_canonical_dir_path(dir) for dir in lib_directories]
     lib_directories = [dir for dir in lib_directories if _exists(rctx, dir)]
-    print(lib_directories)
     for item in lib_directories:
         link_flags.append("-L{}".format(item))
         if not _is_cross_compiling(rctx):
@@ -228,14 +224,14 @@ def _cc_toolchain_config_impl(rctx):
         else:
             for dir in lib_directories:
                 if _exists(rctx, dir + item):
-                    link_libs.append(item)
-    print(link_libs)
-    #for item in link_libs:
-    #if rctx.attr.supports_start_end_lib:
-    #link_flags.append("-Wl,--push-state,-as-needed")
-    #link_flags.append(item)
-    #if rctx.attr.supports_start_end_lib:
-    #link_flags.append("-Wl,--pop-state")
+                    link_libs.append(dir + item)
+    for item in link_libs:
+        if rctx.attr.supports_start_end_lib:
+            link_flags.append("-Wl,--push-state,-as-needed")
+        link_flags.append(item)
+        if rctx.attr.supports_start_end_lib:
+            link_flags.append("-Wl,--pop-state")
+    link_libs = []
 
     if rctx.attr.compiler == "clang":
         link_flags.append("-rtlib=compiler-rt")
@@ -254,8 +250,8 @@ def _cc_toolchain_config_impl(rctx):
     elif rctx.attr.compiler == "gcc":
         if rctx.attr.supports_start_end_lib:
             link_flags.append("-Wl,--push-state,-as-needed")
-        link_libs.append("-lstdc++")
-        link_libs.append("-lstdc++fs")
+        link_flags.append("-lstdc++")
+        link_flags.append("-lstdc++fs")
         if rctx.attr.supports_start_end_lib:
             link_flags.append("-Wl,--pop-state")
 
