@@ -44,6 +44,8 @@ def is_system_include_directory(rctx, item, triple):
     triple_search_path = "usr/include/{}".format(triple)
     if rctx.attr.target_os == "osx" and "System/Library/Frameworks" in item:
         return True
+    if rctx.attr.target_os == "windows" and "usr/x86_64-w64-mingw32/include" in item:
+        return True
     if "usr/include" in item or triple_search_path in item:
         return True
 

@@ -109,8 +109,6 @@ def _cc_toolchain_config_impl(rctx):
     link_flags = [
         #"-v",
         "-B{}bin".format(toolchain_path_prefix),
-        "-lc",
-        "-lm",
     ]
     if _is_cross_compiling(rctx):
         compile_flags.append("-nostdinc")
@@ -121,13 +119,16 @@ def _cc_toolchain_config_impl(rctx):
 
     if rctx.attr.target_os != "osx":
         link_flags.append("-fuse-ld=lld")
+    if rctx.attr.target_os != "windows":
+        link_flags.append("-lc")
+        link_flags.append("-lm")
 
     archive_flags = []
     opt_link_flags = []
     coverage_compile_flags = ["--coverage"]
     coverage_link_flags = ["--coverage"]
 
-    if rctx.attr.target_os != "osx":
+    if rctx.attr.target_os != "osx" and rctx.attr.target_os != "windows":
         link_flags.extend([
             "-Wl,--build-id=md5",
             "-Wl,--hash-style=gnu",
@@ -258,6 +259,9 @@ def _cc_toolchain_config_impl(rctx):
     if not _is_cross_compiling(rctx):
         link_flags.append("-B/usr/lib/x86_64-linux-gnu")
         sysroot_path = ""
+
+    #if _is_cross_compiling(rctx) and rctx.attr.target_os == "windows":
+    #link_flags.append("-B{}usr/x86_64-w64-mingw32/lib".format(sysroot_path))
 
     compiler_configuration = dict()
     if rctx.attr.compile_flags and len(rctx.attr.compile_flags) != 0:
