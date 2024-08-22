@@ -87,7 +87,7 @@ def _cc_toolchain_config_impl(rctx):
         "-fstack-protector",
         "-fno-omit-frame-pointer",
         "-Wall",
-        #"-v",
+        "-v",
     ]
     dbg_compile_flags = [
         "-g",
@@ -115,7 +115,8 @@ def _cc_toolchain_config_impl(rctx):
         conly_flags.append("-nostdinc")
         cxx_flags.append("-nostdinc")
         cxx_flags.append("-nostdinc++")
-        link_flags.append("-nostdlib")
+        if rctx.attr.target_os != "windows":
+            link_flags.append("-nostdlib")
 
     if rctx.attr.target_os != "osx":
         link_flags.append("-fuse-ld=lld")
@@ -226,6 +227,8 @@ def _cc_toolchain_config_impl(rctx):
             for dir in lib_directories:
                 if _exists(rctx, dir + item):
                     link_libs.append(dir + item)
+                    break
+
     for item in link_libs:
         if rctx.attr.supports_start_end_lib:
             link_flags.append("-Wl,--push-state,-as-needed")
@@ -260,8 +263,8 @@ def _cc_toolchain_config_impl(rctx):
         link_flags.append("-B/usr/lib/x86_64-linux-gnu")
         sysroot_path = ""
 
-    #if _is_cross_compiling(rctx) and rctx.attr.target_os == "windows":
-    #link_flags.append("-B{}usr/x86_64-w64-mingw32/lib".format(sysroot_path))
+    if _is_cross_compiling(rctx) and rctx.attr.target_os == "windows":
+        link_flags.append("-B{}lib/gcc/x86_64-w64-mingw32/14.2.0".format(toolchain_path_prefix))
 
     compiler_configuration = dict()
     if rctx.attr.compile_flags and len(rctx.attr.compile_flags) != 0:
