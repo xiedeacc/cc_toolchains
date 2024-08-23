@@ -271,6 +271,10 @@ def _impl(ctx):
     else:
         symbol_check = None
 
+    copy_dynamic_libraries_to_binary_feature = feature(
+        name = "copy_dynamic_libraries_to_binary",
+    )
+
     supports_pic_feature = feature(
         name = "supports_pic",
         enabled = True,
@@ -1131,9 +1135,10 @@ def _impl(ctx):
     )
 
     is_linux = ctx.attr.target_libc != "macosx"
+    is_windows = ctx.attr.target_system_name == "x86_64-windows"
     libtool_feature = feature(
         name = "libtool",
-        enabled = not is_linux,
+        enabled = not is_linux and not is_windows,
     )
 
     archiver_flags_feature = feature(
@@ -1523,7 +1528,80 @@ def _impl(ctx):
     )
 
     # TODO(#8303): Mac crosstool should also declare every feature.
-    if is_linux:
+    if ctx.attr.target_system_name == "x86_64-windows" and ctx.attr.compiler == "gcc":
+        artifact_name_patterns = [
+            artifact_name_pattern(
+                category_name = "dynamic_library",
+                prefix = "lib",
+                extension = ".dll",
+            ),
+            artifact_name_pattern(
+                category_name = "executable",
+                prefix = "",
+                extension = ".exe",
+            ),
+        ]
+        features = [
+            cpp_modules_feature,
+            dependency_file_feature,
+            copy_dynamic_libraries_to_binary_feature,
+            serialized_diagnostics_file_feature,
+            random_seed_feature,
+            pic_feature,
+            per_object_debug_info_feature,
+            preprocessor_defines_feature,
+            includes_feature,
+            include_paths_feature,
+            external_include_paths_feature,
+            fdo_instrument_feature,
+            cs_fdo_instrument_feature,
+            cs_fdo_optimize_feature,
+            thinlto_feature,
+            fdo_prefetch_hints_feature,
+            autofdo_feature,
+            build_interface_libraries_feature,
+            dynamic_library_linker_tool_feature,
+            generate_linkmap_feature,
+            shared_flag_feature,
+            linkstamps_feature,
+            output_execpath_flags_feature,
+            runtime_library_search_directories_feature,
+            library_search_directories_feature,
+            archiver_flags_feature,
+            force_pic_flags_feature,
+            fission_support_feature,
+            strip_debug_symbols_feature,
+            coverage_feature,
+            supports_pic_feature,
+            asan_feature,
+            tsan_feature,
+            ubsan_feature,
+            gcc_quoting_for_param_files_feature,
+            static_link_cpp_runtimes_feature,
+        ] + (
+            [
+                supports_start_end_lib_feature,
+            ] if ctx.attr.supports_start_end_lib else []
+        ) + [
+            default_compile_flags_feature,
+            default_link_flags_feature,
+            libraries_to_link_feature,
+            user_link_flags_feature,
+            default_link_libs_feature,
+            static_libgcc_feature,
+            fdo_optimize_feature,
+            dbg_feature,
+            opt_feature,
+            user_compile_flags_feature,
+            sysroot_feature,
+            compiler_input_flags_feature,
+            compiler_output_flags_feature,
+            unfiltered_compile_flags_feature,
+            treat_warnings_as_errors_feature,
+            archive_param_file_feature,
+        ] + layering_check_features(ctx.attr.compiler, ctx.attr.extra_flags_per_feature, is_macos = False)
+
+    elif is_linux:
         # Linux artifact name patterns are the default.
         artifact_name_patterns = []
         features = [
