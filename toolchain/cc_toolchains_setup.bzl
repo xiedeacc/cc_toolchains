@@ -47,9 +47,28 @@ _attrs = {
 }
 
 def _cc_toolchain_repo_impl(rctx):
+    content = rctx.read(Label("//toolchain:cc_toolchain_repo.BUILD.tpl"))
+    if rctx.attr.tool_names.get("windres"):
+        windres = rctx.attr.tool_names.get("windres")
+        content += """
+native_binary(
+    name = "{name}",
+    out = "{name}",
+    src = "bin/{name}",
+)
+""".format(name = windres)
+
+        content += """
+select_file(
+    name = "windres",
+    srcs = ":all_files",
+    subpath = "bin/{name}",
+)
+""".format(name = windres)
+
     rctx.file(
         "BUILD.bazel",
-        content = rctx.read(Label("//toolchain:cc_toolchain_repo.BUILD.tpl")),
+        content = content,
         executable = False,
     )
     if _is_absolute_path(rctx.attr.url):
@@ -329,6 +348,11 @@ def _cc_toolchain_config_impl(rctx):
     extra_compiler_files = _label_to_string(rctx.attr.extra_compiler_files) if rctx.attr.extra_compiler_files else ""
     repo_all_files_label_str = _label_to_string(Label(toolchain_repo_root + ":all_files"))
 
+    windres_path = "\"\""
+    if rctx.attr.tool_names.get("windres"):
+        windres_name = rctx.attr.tool_names.get("windres")
+        windres_path = "\"{}bin/{}\"".format(toolchain_path_prefix, windres_name)
+
     rctx.template(
         "BUILD.bazel",
         Label("//toolchain:cc_toolchain_config.BUILD.tpl"),
@@ -345,6 +369,7 @@ def _cc_toolchain_config_impl(rctx):
             "%{tool_paths}": _dict_to_string(tool_paths),
             "%{supports_start_end_lib}": str(rctx.attr.supports_start_end_lib),
             "%{sysroot_path}": sysroot_path,
+            "%{windres_path}": windres_path,
         },
     )
     if rctx.attr.debug:
