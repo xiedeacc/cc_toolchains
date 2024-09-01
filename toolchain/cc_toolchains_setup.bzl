@@ -106,7 +106,7 @@ def _cc_toolchain_config_impl(rctx):
         "-fstack-protector",
         "-fno-omit-frame-pointer",
         "-Wall",
-        "-v",
+        #"-v",
     ]
     dbg_compile_flags = [
         "-g",
@@ -270,7 +270,7 @@ def _cc_toolchain_config_impl(rctx):
         if _is_cross_compiling(rctx):
             compile_flags.append("--target={}".format(rctx.attr.triple))
             link_flags.append("--target={}".format(rctx.attr.triple))
-    elif rctx.attr.compiler == "gcc":
+    elif rctx.attr.compiler == "gcc" or rctx.attr.compiler == "mingw-gcc":
         if rctx.attr.supports_start_end_lib:
             link_flags.append("-Wl,--push-state,-as-needed")
         link_flags.append("-lstdc++")
