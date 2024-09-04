@@ -1541,13 +1541,6 @@ def _impl(ctx):
                 extension = ".exe",
             ),
         ]
-        #windres_action = action_config(
-        #action_name = ACTION_NAMES.cpp_compile,
-        #implies = all_compile_actions,
-        #tools = [tool(path = ctx.attr.msvc_cl_path)],
-        #)
-
-        #windres_feature = feature(name = "default_windres", enabled = True)
         features = [
             #windres_feature,
             cpp_modules_feature,
