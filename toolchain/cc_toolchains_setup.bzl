@@ -134,7 +134,7 @@ def _cc_toolchain_config_impl(rctx):
         conly_flags.append("-nostdinc")
         cxx_flags.append("-nostdinc")
         cxx_flags.append("-nostdinc++")
-        if rctx.attr.target_os != "windows":
+        if rctx.attr.target_os != "windows" and rctx.attr.distro != "openwrt":
             link_flags.append("-nostdlib")
 
     if rctx.attr.target_os != "osx":
