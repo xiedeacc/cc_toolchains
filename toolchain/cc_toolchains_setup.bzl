@@ -134,7 +134,7 @@ def _cc_toolchain_config_impl(rctx):
         conly_flags.append("-nostdinc")
         cxx_flags.append("-nostdinc")
         cxx_flags.append("-nostdinc++")
-        if rctx.attr.target_os != "windows" and rctx.attr.target_arch != "aarch64":
+        if rctx.attr.target_os != "windows" and rctx.attr.target_distro != "openwrt":
             link_flags.append("-nostdlib")
 
     if rctx.attr.target_os != "osx":
@@ -257,8 +257,6 @@ def _cc_toolchain_config_impl(rctx):
     link_libs = []
 
     if rctx.attr.compiler == "clang":
-        link_flags.append("-rtlib=compiler-rt")
-        link_flags.append("-stdlib=libc++")
         if rctx.attr.supports_start_end_lib:
             link_flags.append("-Wl,--push-state,-as-needed")
         link_flags.append("-lc++")
@@ -284,6 +282,8 @@ def _cc_toolchain_config_impl(rctx):
 
     if _is_cross_compiling(rctx) and rctx.attr.target_os == "windows":
         link_flags.append("-B{}lib/gcc/x86_64-w64-mingw32/14.2.0".format(toolchain_path_prefix))
+    if _is_cross_compiling(rctx) and rctx.attr.compiler == "clang":
+        link_flags.append("-B{}usr/lib".format(sysroot_path))
 
     compiler_configuration = dict()
     if rctx.attr.compile_flags and len(rctx.attr.compile_flags) != 0:
