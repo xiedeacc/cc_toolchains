@@ -199,26 +199,27 @@ def _cc_toolchain_config_impl(rctx):
                 c_builtin_include_directories[sysroot_path + item] = True
             cxx_builtin_include_directories[sysroot_path + item] = True
 
-    # Convert back to lists but only keep existing directories
-    system_include_directories = [dir for dir in system_include_directories.keys() if _exists(rctx, dir)]
-    c_builtin_include_directories = [dir for dir in c_builtin_include_directories.keys() if _exists(rctx, dir)]
-    cxx_builtin_include_directories = [dir for dir in cxx_builtin_include_directories.keys() if _exists(rctx, dir)]
+    # Filter out non-existing directories but keep as dictionaries
+    system_include_directories = {dir: True for dir in system_include_directories.keys() if _exists(rctx, dir)}
+    c_builtin_include_directories = {dir: True for dir in c_builtin_include_directories.keys() if _exists(rctx, dir)}
+    cxx_builtin_include_directories = {dir: True for dir in cxx_builtin_include_directories.keys() if _exists(rctx, dir)}
 
-    for item in c_builtin_include_directories:
+    for item in c_builtin_include_directories.keys():
         conly_flags.append("-isystem")
         conly_flags.append(item)
         compile_flags.append("-idirafter")
         compile_flags.append(item)
 
-    for item in cxx_builtin_include_directories:
+    for item in cxx_builtin_include_directories.keys():
         cxx_flags.append("-isystem")
         cxx_flags.append(item)
-    for item in system_include_directories:
+    for item in system_include_directories.keys():
         compile_flags.append("-idirafter")
         compile_flags.append(item)
 
-    cxx_builtin_include_directories.extend(c_builtin_include_directories)
-    cxx_builtin_include_directories.extend(system_include_directories)
+    cxx_builtin_include_directories.update(c_builtin_include_directories)
+    cxx_builtin_include_directories.update(system_include_directories)
+    cxx_builtin_include_directories = [dir for dir in cxx_builtin_include_directories.keys()]
 
     lib_directories = []
     for item in rctx.attr.lib_directories:
