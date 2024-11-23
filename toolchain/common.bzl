@@ -1,4 +1,3 @@
-
 BZLMOD_ENABLED = "@@" in str(Label("//:unused"))
 
 def is_absolute_path(path):
@@ -34,6 +33,18 @@ def dict_to_string(d):
     for key, value in d.items():
         parts.append("\"{}\": {}".format(key, value))
     return "{%s}" % ", ".join(parts)
+
+def dict_key_to_string(d):
+    """Converts dictionary keys to a string list format.
+
+    Args:
+        d: Dictionary whose keys need to be converted to string list format
+    Returns:
+        String in the format: ["key1", "key2", ...]
+    """
+    if d == None:
+        return "None"
+    return "[{}]".format(", ".join(["\"{}\"".format(k) for k in d.keys()]))
 
 def is_cxx_search_path(path):
     if "/c++/" in path:
@@ -88,15 +99,3 @@ def download(rctx):
     if rctx.attr.sha256sum != res.sha256:
         fail("need sha256sum:{}, but get:{}".format(rctx.attr.sha256sum, res.sha256))
     return rctx.attr
-
-def dict_key_to_string(d):
-    """Converts dictionary keys to a string list format.
-    
-    Args:
-        d: Dictionary whose keys need to be converted to string list format
-    Returns:
-        String in the format: ["key1", "key2", ...]
-    """
-    if d == None:
-        return "None"
-    return "[{}]".format(", ".join(["\"{}\"".format(k) for k in d.keys()]))

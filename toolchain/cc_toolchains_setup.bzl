@@ -2,6 +2,7 @@ load(
     "//toolchain:common.bzl",
     "BZLMOD_ENABLED",
     _canonical_dir_path = "canonical_dir_path",
+    _dict_key_to_string = "dict_key_to_string",
     _dict_to_string = "dict_to_string",
     _download = "download",
     _exists = "exists",
@@ -11,7 +12,6 @@ load(
     _is_system_include_directory = "is_system_include_directory",
     _label_to_string = "label_to_string",
     _list_to_string = "list_to_string",
-    _dict_key_to_string = "dict_key_to_string",
 )
 
 _attrs = {
@@ -366,7 +366,7 @@ def _cc_toolchain_config_impl(rctx):
             "%{libc}": rctx.attr.libc,
             "%{repo_all_files_label_str}": repo_all_files_label_str,
             "%{extra_compiler_files}": extra_compiler_files,
-            "%{cxx_builtin_include_directories}": _dict_key_to_string(cxx_builtin_include_directories),
+            "%{cxx_builtin_include_directories}": _list_to_string(cxx_builtin_include_directories),
             "%{compiler_configuration}": _dict_to_string(compiler_configuration),
             "%{tool_paths}": _dict_to_string(tool_paths),
             "%{supports_start_end_lib}": str(rctx.attr.supports_start_end_lib),
