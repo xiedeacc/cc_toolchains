@@ -1,4 +1,3 @@
-load("@bazel_skylib//lib:paths.bzl", "paths")
 
 BZLMOD_ENABLED = "@@" in str(Label("//:unused"))
 
@@ -22,6 +21,13 @@ def list_to_string(ls):
     return "[{}]".format(", ".join(["\"{}\"".format(d) for d in ls]))
 
 def dict_to_string(d):
+    """Converts a dictionary to a string representation.
+
+    Args:
+        d: Dictionary to convert to string
+    Returns:
+        String representation of the dictionary, or "None" if input is None
+    """
     if d == None:
         return "None"
     parts = []
@@ -41,6 +47,15 @@ def is_cross_compiling(rctx):
     return True
 
 def is_system_include_directory(rctx, item, triple):
+    """Determines if a path is a system include directory.
+
+    Args:
+        rctx: Repository context containing target OS information
+        item: Path to check
+        triple: Target triple string
+    Returns:
+        Boolean indicating if the path is a system include directory
+    """
     triple_search_path = "usr/include/{}".format(triple)
     if rctx.attr.target_os == "osx" and "System/Library/Frameworks" in item:
         return True
@@ -57,6 +72,13 @@ def exists(rctx, path):
     return rctx.path(path).exists
 
 def download(rctx):
+    """Downloads and extracts a file from the specified URL.
+
+    Args:
+        rctx: Repository context containing url, sha256sum, and strip_prefix attributes
+    Returns:
+        The repository context attributes
+    """
     urls = [rctx.attr.url]
     res = rctx.download_and_extract(
         urls,
@@ -66,3 +88,15 @@ def download(rctx):
     if rctx.attr.sha256sum != res.sha256:
         fail("need sha256sum:{}, but get:{}".format(rctx.attr.sha256sum, res.sha256))
     return rctx.attr
+
+def dict_key_to_string(d):
+    """Converts dictionary keys to a string list format.
+    
+    Args:
+        d: Dictionary whose keys need to be converted to string list format
+    Returns:
+        String in the format: ["key1", "key2", ...]
+    """
+    if d == None:
+        return "None"
+    return "[{}]".format(", ".join(["\"{}\"".format(k) for k in d.keys()]))

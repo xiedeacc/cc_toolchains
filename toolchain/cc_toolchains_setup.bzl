@@ -11,6 +11,7 @@ load(
     _is_system_include_directory = "is_system_include_directory",
     _label_to_string = "label_to_string",
     _list_to_string = "list_to_string",
+    _dict_key_to_string = "dict_key_to_string",
 )
 
 _attrs = {
@@ -77,7 +78,7 @@ select_file(
             rctx.execute(["cp", "-r", path, "."])
         return rctx.attr
 
-    updated_attrs = _download(rctx)
+    return _download(rctx)
 
 cc_toolchain_repo = repository_rule(
     attrs = _attrs,
@@ -165,42 +166,43 @@ def _cc_toolchain_config_impl(rctx):
         "-D__TIME__=redacted",
     ]
 
-    system_include_directories = []
-    c_builtin_include_directories = []
-    cxx_builtin_include_directories = []
+    system_include_directories = {}
+    c_builtin_include_directories = {}
+    cxx_builtin_include_directories = {}
     for item in rctx.attr.cxx_builtin_include_directories:
         if _is_absolute_path(item):
             if _is_system_include_directory(rctx, item, rctx.attr.triple):
-                system_include_directories.append(item)
+                system_include_directories[item] = True
                 continue
-            c_builtin_include_directories.append(item)
-            cxx_builtin_include_directories.append(item)
+            c_builtin_include_directories[item] = True
+            cxx_builtin_include_directories[item] = True
         else:
             if _is_system_include_directory(rctx, item, rctx.attr.triple):
-                system_include_directories.append(toolchain_path_prefix + item)
+                system_include_directories[toolchain_path_prefix + item] = True
                 continue
             if not _is_cxx_search_path(item):
-                c_builtin_include_directories.append(toolchain_path_prefix + item)
-            cxx_builtin_include_directories.append(toolchain_path_prefix + item)
+                c_builtin_include_directories[toolchain_path_prefix + item] = True
+            cxx_builtin_include_directories[toolchain_path_prefix + item] = True
 
     for item in rctx.attr.sysroot_include_directories:
         if _is_absolute_path(item):
             if _is_system_include_directory(rctx, item, rctx.attr.triple):
-                system_include_directories.append(item)
+                system_include_directories[item] = True
                 continue
-            c_builtin_include_directories.append(item)
-            cxx_builtin_include_directories.append(item)
+            c_builtin_include_directories[item] = True
+            cxx_builtin_include_directories[item] = True
         else:
             if _is_system_include_directory(rctx, item, rctx.attr.triple):
-                system_include_directories.append(sysroot_path + item)
+                system_include_directories[sysroot_path + item] = True
                 continue
             if not _is_cxx_search_path(item):
-                c_builtin_include_directories.append(sysroot_path + item)
-            cxx_builtin_include_directories.append(sysroot_path + item)
+                c_builtin_include_directories[sysroot_path + item] = True
+            cxx_builtin_include_directories[sysroot_path + item] = True
 
-    system_include_directories = [dir for dir in system_include_directories if _exists(rctx, dir)]
-    c_builtin_include_directories = [dir for dir in c_builtin_include_directories if _exists(rctx, dir)]
-    cxx_builtin_include_directories = [dir for dir in cxx_builtin_include_directories if _exists(rctx, dir)]
+    # Convert back to lists but only keep existing directories
+    system_include_directories = [dir for dir in system_include_directories.keys() if _exists(rctx, dir)]
+    c_builtin_include_directories = [dir for dir in c_builtin_include_directories.keys() if _exists(rctx, dir)]
+    cxx_builtin_include_directories = [dir for dir in cxx_builtin_include_directories.keys() if _exists(rctx, dir)]
 
     for item in c_builtin_include_directories:
         conly_flags.append("-isystem")
@@ -364,7 +366,7 @@ def _cc_toolchain_config_impl(rctx):
             "%{libc}": rctx.attr.libc,
             "%{repo_all_files_label_str}": repo_all_files_label_str,
             "%{extra_compiler_files}": extra_compiler_files,
-            "%{cxx_builtin_include_directories}": _list_to_string(cxx_builtin_include_directories),
+            "%{cxx_builtin_include_directories}": _dict_key_to_string(cxx_builtin_include_directories),
             "%{compiler_configuration}": _dict_to_string(compiler_configuration),
             "%{tool_paths}": _dict_to_string(tool_paths),
             "%{supports_start_end_lib}": str(rctx.attr.supports_start_end_lib),
@@ -383,6 +385,13 @@ cc_toolchain_config = repository_rule(
 )
 
 def cc_toolchains_setup(name, **kwargs):
+    """Sets up C/C++ toolchains for cross-compilation.
+
+    Args:
+        name: The name of the toolchain setup.
+        **kwargs: Must contain a "toolchains" dictionary mapping target architectures
+            to their respective toolchain configurations.
+    """
     if not kwargs.get("toolchains"):
         fail("must set toolchains")
     toolchains = kwargs.get("toolchains")
