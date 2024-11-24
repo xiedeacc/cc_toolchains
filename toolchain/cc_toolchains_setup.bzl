@@ -17,7 +17,7 @@ load(
 _attrs = {
     "target_arch": attr.string(mandatory = True),
     "target_os": attr.string(mandatory = True),
-    "target_distro": attr.string(mandatory = True),
+    "vendor": attr.string(mandatory = True),
     "libc": attr.string(mandatory = False, default = "glibc"),
     "compiler": attr.string(mandatory = True),
     "triple": attr.string(mandatory = True),
@@ -87,7 +87,7 @@ cc_toolchain_repo = repository_rule(
 )
 
 def _cc_toolchain_config_impl(rctx):
-    suffix = "{}_{}_{}_{}_{}".format(rctx.attr.target_arch, rctx.attr.target_os, rctx.attr.target_distro, rctx.attr.libc, rctx.attr.compiler)
+    suffix = "{}_{}_{}_{}_{}".format(rctx.attr.compiler, rctx.attr.target_arch, rctx.attr.vendor, rctx.attr.target_os, rctx.attr.libc)
     toolchain_repo_root = ("@" if BZLMOD_ENABLED else "") + "@cc_toolchain_repo_{}//".format(suffix)
     toolchain_path_prefix = _canonical_dir_path(str(rctx.path(Label(toolchain_repo_root + ":BUILD.bazel")).dirname))
 
@@ -100,6 +100,8 @@ def _cc_toolchain_config_impl(rctx):
 
     if sysroot_path == "":
         fail("sysroot_path empty, set sysroot if cross compiling, else set to toolchain root")
+
+    print(sysroot_path)
 
     compile_flags = [
         "-B{}bin".format(toolchain_path_prefix),
@@ -130,19 +132,18 @@ def _cc_toolchain_config_impl(rctx):
         #"-v",
         "-B{}bin".format(toolchain_path_prefix),
     ]
-    if _is_cross_compiling(rctx):
-        compile_flags.append("-nostdinc")
-        conly_flags.append("-nostdinc")
-        cxx_flags.append("-nostdinc")
-        cxx_flags.append("-nostdinc++")
-        if rctx.attr.compiler != "gcc":
-            link_flags.append("-nostdlib")
 
-    if rctx.attr.target_os != "osx":
+    compile_flags.append("-nostdinc")
+    conly_flags.append("-nostdinc")
+    cxx_flags.append("-nostdinc")
+    cxx_flags.append("-nostdinc++")
+    if rctx.attr.compiler != "gcc":
+        link_flags.append("-nostdlib")
+
+    if rctx.attr.target_os == "osx":
         link_flags.append("-fuse-ld=lld")
-    if rctx.attr.target_os != "windows":
-        link_flags.append("-lc")
-        link_flags.append("-lm")
+    elif rctx.attr.target_os == "linux":
+        link_flags.append("-fuse-ld=bfd")
 
     archive_flags = []
     opt_link_flags = []
@@ -240,6 +241,8 @@ def _cc_toolchain_config_impl(rctx):
         if not _is_cross_compiling(rctx):
             link_flags.append("-Wl,-rpath,{}".format(item))
 
+    link_flags.append("-B{}usr/lib".format(sysroot_path))
+
     link_libs = []
     for item in rctx.attr.link_libs:
         if _is_absolute_path(item):
@@ -259,34 +262,27 @@ def _cc_toolchain_config_impl(rctx):
             link_flags.append("-Wl,--pop-state")
     link_libs = []
 
-    if rctx.attr.compiler == "clang":
-        if rctx.attr.supports_start_end_lib:
-            link_flags.append("-Wl,--push-state,-as-needed")
-        link_flags.append("-lc++")
-        link_flags.append("-lc++abi")
-        link_flags.append("-lunwind")
-        if rctx.attr.supports_start_end_lib:
-            link_flags.append("-Wl,--pop-state")
+    if rctx.attr.supports_start_end_lib:
+        link_flags.append("-Wl,--push-state,-as-needed")
+    if rctx.attr.libc == "musl":
+        link_flags.append("{}usr/lib/libc.a".format(sysroot_path))
+        link_flags.append("{}usr/lib/libm.a".format(sysroot_path))
+    else:
+        link_flags.append("-lc")
+        link_flags.append("-lm")
 
+    if rctx.attr.compiler == "clang":
+        link_flags.append("{}usr/lib/libc++.a".format(sysroot_path))
+        link_flags.append("{}usr/lib/libc++abi.a".format(sysroot_path))
+        link_flags.append("{}usr/lib/libunwind.a".format(sysroot_path))
         if _is_cross_compiling(rctx):
             compile_flags.append("--target={}".format(rctx.attr.triple))
             link_flags.append("--target={}".format(rctx.attr.triple))
-    elif rctx.attr.compiler == "gcc" or rctx.attr.compiler == "mingw-gcc":
-        if rctx.attr.supports_start_end_lib:
-            link_flags.append("-Wl,--push-state,-as-needed")
-        link_flags.append("-lstdc++")
-        link_flags.append("-lstdc++fs")
-        if rctx.attr.supports_start_end_lib:
-            link_flags.append("-Wl,--pop-state")
-
-    if not _is_cross_compiling(rctx):
-        link_flags.append("-B/usr/lib/x86_64-linux-gnu")
-        sysroot_path = ""
-
-    if _is_cross_compiling(rctx) and rctx.attr.target_os == "windows":
-        link_flags.append("-B{}lib/gcc/x86_64-w64-mingw32/14.2.0".format(toolchain_path_prefix))
-    if _is_cross_compiling(rctx) and rctx.attr.compiler == "clang":
-        link_flags.append("-B{}usr/lib".format(sysroot_path))
+    elif rctx.attr.compiler == "gcc":
+        link_flags.append("{}lib/libstdc++.a".format(sysroot_path))
+        link_flags.append("{}lib/libstdc++fs.a".format(sysroot_path))
+    if rctx.attr.supports_start_end_lib:
+        link_flags.append("-Wl,--pop-state")
 
     compiler_configuration = dict()
     if rctx.attr.compile_flags and len(rctx.attr.compile_flags) != 0:
@@ -399,88 +395,88 @@ def cc_toolchains_setup(name, **kwargs):
     toolchain_args = dict()
     for target_arch, target_arch_info in toolchains.items():
         for target_os, target_os_infos in target_arch_info.items():
-            for target_distro_info in target_os_infos:
+            for target_toolchain_info in target_os_infos:
                 toolchain_args = {}
-                if not target_distro_info.get("url"):
+                if not target_toolchain_info.get("url"):
                     fail("must have url")
-                if not _is_absolute_path(target_distro_info.get("url")) and not target_distro_info.get("sha256sum"):
+                if not _is_absolute_path(target_toolchain_info.get("url")) and not target_toolchain_info.get("sha256sum"):
                     fail("must have sha256sum unless url is a absolute path")
 
                 toolchain_args["target_arch"] = target_arch  #eg. aarch64
                 toolchain_args["target_os"] = target_os
-                toolchain_args["target_distro"] = target_distro_info.get("distro")  #eg. openwrt
-                toolchain_args["libc"] = target_distro_info.get("libc")
-                toolchain_args["compiler"] = target_distro_info.get("compiler")  #eg. clang
-                toolchain_args["triple"] = target_distro_info.get("triple")  #eg. x86_64-linux-gnu
-                toolchain_args["url"] = target_distro_info.get("url")
+                toolchain_args["vendor"] = target_toolchain_info.get("vendor")  #eg. pc
+                toolchain_args["libc"] = target_toolchain_info.get("libc")
+                toolchain_args["compiler"] = target_toolchain_info.get("compiler")  #eg. clang
+                toolchain_args["triple"] = target_toolchain_info.get("triple")  #eg. x86_64-linux-gnu
+                toolchain_args["url"] = target_toolchain_info.get("url")
 
-                if target_distro_info.get("strip_prefix"):
-                    toolchain_args["strip_prefix"] = target_distro_info.get("strip_prefix")
+                if target_toolchain_info.get("strip_prefix"):
+                    toolchain_args["strip_prefix"] = target_toolchain_info.get("strip_prefix")
 
-                if target_distro_info.get("sha256sum"):
-                    toolchain_args["sha256sum"] = target_distro_info.get("sha256sum")
+                if target_toolchain_info.get("sha256sum"):
+                    toolchain_args["sha256sum"] = target_toolchain_info.get("sha256sum")
 
-                if target_distro_info.get("sysroot"):
-                    toolchain_args["sysroot"] = target_distro_info.get("sysroot")
+                if target_toolchain_info.get("sysroot"):
+                    toolchain_args["sysroot"] = target_toolchain_info.get("sysroot")
 
-                toolchain_args["tool_names"] = target_distro_info.get("tool_names")
+                toolchain_args["tool_names"] = target_toolchain_info.get("tool_names")
 
-                if target_distro_info.get("extra_compiler_files"):
-                    toolchain_args["extra_compiler_files"] = target_distro_info.get("extra_compiler_files")
+                if target_toolchain_info.get("extra_compiler_files"):
+                    toolchain_args["extra_compiler_files"] = target_toolchain_info.get("extra_compiler_files")
 
-                if target_distro_info.get("cxx_builtin_include_directories"):
-                    toolchain_args["cxx_builtin_include_directories"] = target_distro_info.get("cxx_builtin_include_directories")
+                if target_toolchain_info.get("cxx_builtin_include_directories"):
+                    toolchain_args["cxx_builtin_include_directories"] = target_toolchain_info.get("cxx_builtin_include_directories")
 
-                if target_distro_info.get("sysroot_include_directories"):
-                    toolchain_args["sysroot_include_directories"] = target_distro_info.get("sysroot_include_directories")
+                if target_toolchain_info.get("sysroot_include_directories"):
+                    toolchain_args["sysroot_include_directories"] = target_toolchain_info.get("sysroot_include_directories")
 
-                if target_distro_info.get("sysroot_lib_directories"):
-                    toolchain_args["sysroot_lib_directories"] = target_distro_info.get("sysroot_lib_directories")
+                if target_toolchain_info.get("sysroot_lib_directories"):
+                    toolchain_args["sysroot_lib_directories"] = target_toolchain_info.get("sysroot_lib_directories")
 
-                if target_distro_info.get("lib_directories"):
-                    toolchain_args["lib_directories"] = target_distro_info.get("lib_directories")
+                if target_toolchain_info.get("lib_directories"):
+                    toolchain_args["lib_directories"] = target_toolchain_info.get("lib_directories")
 
-                if target_distro_info.get("compile_flags"):
-                    toolchain_args["compile_flags"] = target_distro_info.get("compile_flags")
+                if target_toolchain_info.get("compile_flags"):
+                    toolchain_args["compile_flags"] = target_toolchain_info.get("compile_flags")
 
-                if target_distro_info.get("conly_flags"):
-                    toolchain_args["conly_flags"] = target_distro_info.get("conly_flags")
+                if target_toolchain_info.get("conly_flags"):
+                    toolchain_args["conly_flags"] = target_toolchain_info.get("conly_flags")
 
-                if target_distro_info.get("cxx_flags"):
-                    toolchain_args["cxx_flags"] = target_distro_info.get("cxx_flags")
+                if target_toolchain_info.get("cxx_flags"):
+                    toolchain_args["cxx_flags"] = target_toolchain_info.get("cxx_flags")
 
-                if target_distro_info.get("link_flags"):
-                    toolchain_args["link_flags"] = target_distro_info.get("link_flags")
+                if target_toolchain_info.get("link_flags"):
+                    toolchain_args["link_flags"] = target_toolchain_info.get("link_flags")
 
-                if target_distro_info.get("archive_flags"):
-                    toolchain_args["archive_flags"] = target_distro_info.get("archive_flags")
+                if target_toolchain_info.get("archive_flags"):
+                    toolchain_args["archive_flags"] = target_toolchain_info.get("archive_flags")
 
-                if target_distro_info.get("link_libs"):
-                    toolchain_args["link_libs"] = target_distro_info.get("link_libs")
+                if target_toolchain_info.get("link_libs"):
+                    toolchain_args["link_libs"] = target_toolchain_info.get("link_libs")
 
-                if target_distro_info.get("opt_compile_flags"):
-                    toolchain_args["opt_compile_flags"] = target_distro_info.get("opt_compile_flags")
+                if target_toolchain_info.get("opt_compile_flags"):
+                    toolchain_args["opt_compile_flags"] = target_toolchain_info.get("opt_compile_flags")
 
-                if target_distro_info.get("opt_link_flags"):
-                    toolchain_args["opt_link_flags"] = target_distro_info.get("opt_link_flags")
+                if target_toolchain_info.get("opt_link_flags"):
+                    toolchain_args["opt_link_flags"] = target_toolchain_info.get("opt_link_flags")
 
-                if target_distro_info.get("dbg_compile_flags"):
-                    toolchain_args["dbg_compile_flags"] = target_distro_info.get("dbg_compile_flags")
+                if target_toolchain_info.get("dbg_compile_flags"):
+                    toolchain_args["dbg_compile_flags"] = target_toolchain_info.get("dbg_compile_flags")
 
-                if target_distro_info.get("coverage_compile_flags"):
-                    toolchain_args["coverage_compile_flags"] = target_distro_info.get("coverage_compile_flags")
+                if target_toolchain_info.get("coverage_compile_flags"):
+                    toolchain_args["coverage_compile_flags"] = target_toolchain_info.get("coverage_compile_flags")
 
-                if target_distro_info.get("coverage_link_flags"):
-                    toolchain_args["coverage_link_flags"] = target_distro_info.get("coverage_link_flags")
+                if target_toolchain_info.get("coverage_link_flags"):
+                    toolchain_args["coverage_link_flags"] = target_toolchain_info.get("coverage_link_flags")
 
-                if target_distro_info.get("unfiltered_compile_flags"):
-                    toolchain_args["unfiltered_compile_flags"] = target_distro_info.get("unfiltered_compile_flags")
+                if target_toolchain_info.get("unfiltered_compile_flags"):
+                    toolchain_args["unfiltered_compile_flags"] = target_toolchain_info.get("unfiltered_compile_flags")
 
-                if target_distro_info.get("supports_start_end_lib") != None:
-                    toolchain_args["supports_start_end_lib"] = target_distro_info.get("supports_start_end_lib")
+                if target_toolchain_info.get("supports_start_end_lib") != None:
+                    toolchain_args["supports_start_end_lib"] = target_toolchain_info.get("supports_start_end_lib")
 
-                if target_distro_info.get("debug") != None:
-                    toolchain_args["debug"] = target_distro_info.get("debug")
+                if target_toolchain_info.get("debug") != None:
+                    toolchain_args["debug"] = target_toolchain_info.get("debug")
 
-                cc_toolchain_repo(name = "cc_toolchain_repo_{}_{}_{}_{}_{}".format(target_arch, target_os, toolchain_args["target_distro"], toolchain_args["libc"], toolchain_args["compiler"]), **toolchain_args)
-                cc_toolchain_config(name = "cc_toolchain_config_{}_{}_{}_{}_{}".format(target_arch, target_os, toolchain_args["target_distro"], toolchain_args["libc"], toolchain_args["compiler"]), **toolchain_args)
+                cc_toolchain_repo(name = "cc_toolchain_repo_{}_{}_{}_{}_{}".format(toolchain_args["compiler"], target_arch, toolchain_args["vendor"], target_os, toolchain_args["libc"]), **toolchain_args)
+                cc_toolchain_config(name = "cc_toolchain_config_{}_{}_{}_{}_{}".format(toolchain_args["compiler"], target_arch, toolchain_args["vendor"], target_os, toolchain_args["libc"]), **toolchain_args)
