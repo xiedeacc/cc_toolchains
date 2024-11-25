@@ -140,9 +140,10 @@ def _cc_toolchain_config_impl(rctx):
     if rctx.attr.compiler != "gcc":
         link_flags.append("-nostdlib")
 
-    if rctx.attr.target_os == "osx":
-        link_flags.append("-fuse-ld=lld")
-    elif rctx.attr.target_os == "linux":
+    if rctx.attr.compiler == "clang":
+        if rctx.attr.target_os == "linux":
+            link_flags.append("-fuse-ld=lld")
+    elif rctx.attr.compiler == "gcc":
         link_flags.append("-fuse-ld=bfd")
 
     archive_flags = []
@@ -270,14 +271,17 @@ def _cc_toolchain_config_impl(rctx):
     else:
         link_flags.append("-lc")
         link_flags.append("-lm")
-
     if rctx.attr.compiler == "clang":
-        link_flags.append("{}usr/lib/libc++.a".format(sysroot_path))
-        link_flags.append("{}usr/lib/libc++abi.a".format(sysroot_path))
-        link_flags.append("{}usr/lib/libunwind.a".format(sysroot_path))
-        if _is_cross_compiling(rctx):
-            compile_flags.append("--target={}".format(rctx.attr.triple))
-            link_flags.append("--target={}".format(rctx.attr.triple))
+        compile_flags.append("--target={}".format(rctx.attr.triple))
+        link_flags.append("--target={}".format(rctx.attr.triple))
+        if rctx.attr.target_os == "osx":
+            link_flags.append("{}lib/darwin/libc++.a".format(toolchain_path_prefix))
+            link_flags.append("{}lib/darwin/libc++abi.a".format(toolchain_path_prefix))
+            link_flags.append("{}lib/darwin/libunwind.a".format(toolchain_path_prefix))
+        elif rctx.attr.target_os == "linux":
+            link_flags.append("{}lib/{}/libc++.a".format(toolchain_path_prefix, rctx.attr.triple))
+            link_flags.append("{}lib/{}/libc++abi.a".format(toolchain_path_prefix, rctx.attr.triple))
+            link_flags.append("{}lib/{}/libunwind.a".format(toolchain_path_prefix, rctx.attr.triple))
     elif rctx.attr.compiler == "gcc":
         link_flags.append("{}lib/libstdc++.a".format(sysroot_path))
         link_flags.append("{}lib/libstdc++fs.a".format(sysroot_path))
