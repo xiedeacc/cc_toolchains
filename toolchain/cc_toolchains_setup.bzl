@@ -283,8 +283,10 @@ def _cc_toolchain_config_impl(rctx):
             link_flags.append("{}lib/{}/libc++abi.a".format(toolchain_path_prefix, rctx.attr.triple))
             link_flags.append("{}lib/{}/libunwind.a".format(toolchain_path_prefix, rctx.attr.triple))
     elif rctx.attr.compiler == "gcc":
-        link_flags.append("{}lib/libstdc++.a".format(sysroot_path))
-        link_flags.append("{}lib/libstdc++fs.a".format(sysroot_path))
+        #link_flags.append("{}lib/libstdc++.a".format(sysroot_path))
+        #link_flags.append("{}lib/libstdc++fs.a".format(sysroot_path))
+        link_flags.append("-lstdc++")
+        link_flags.append("-lstdc++fs")
     if rctx.attr.supports_start_end_lib:
         link_flags.append("-Wl,--pop-state")
 
