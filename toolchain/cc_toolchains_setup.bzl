@@ -144,7 +144,7 @@ def _cc_toolchain_config_impl(rctx):
         if rctx.attr.target_os == "linux":
             link_flags.append("-fuse-ld=lld")
     elif rctx.attr.compiler == "gcc":
-        link_flags.append("-fuse-ld=bfd")
+        link_flags.append("-fuse-ld=lld")
 
     archive_flags = []
     opt_link_flags = []
@@ -242,6 +242,7 @@ def _cc_toolchain_config_impl(rctx):
         if not _is_cross_compiling(rctx):
             link_flags.append("-Wl,-rpath,{}".format(item))
 
+    link_flags.append("-B{}lib".format(sysroot_path))
     link_flags.append("-B{}usr/lib".format(sysroot_path))
 
     link_libs = []
