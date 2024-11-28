@@ -101,8 +101,6 @@ def _cc_toolchain_config_impl(rctx):
     if sysroot_path == "":
         fail("sysroot_path empty, set sysroot if cross compiling, else set to toolchain root")
 
-    print(sysroot_path)
-
     compile_flags = [
         "-B{}bin".format(toolchain_path_prefix),
         "-U_FORTIFY_SOURCE",  # https://github.com/google/sanitizers/issues/247
@@ -266,12 +264,7 @@ def _cc_toolchain_config_impl(rctx):
 
     if rctx.attr.supports_start_end_lib:
         link_flags.append("-Wl,--push-state,-as-needed")
-    if rctx.attr.libc == "musl":
-        link_flags.append("{}usr/lib/libc.a".format(sysroot_path))
-        link_flags.append("{}usr/lib/libm.a".format(sysroot_path))
-    else:
-        link_flags.append("-lc")
-        link_flags.append("-lm")
+
     if rctx.attr.compiler == "clang":
         compile_flags.append("--target={}".format(rctx.attr.triple))
         link_flags.append("--target={}".format(rctx.attr.triple))
@@ -284,10 +277,9 @@ def _cc_toolchain_config_impl(rctx):
             link_flags.append("{}lib/{}/libc++abi.a".format(toolchain_path_prefix, rctx.attr.triple))
             link_flags.append("{}lib/{}/libunwind.a".format(toolchain_path_prefix, rctx.attr.triple))
     elif rctx.attr.compiler == "gcc":
-        #link_flags.append("{}lib/libstdc++.a".format(sysroot_path))
-        #link_flags.append("{}lib/libstdc++fs.a".format(sysroot_path))
-        link_flags.append("-lstdc++")
-        link_flags.append("-lstdc++fs")
+        link_flags.append("{}lib/libstdc++.a".format(sysroot_path))
+        link_flags.append("{}lib/libstdc++fs.a".format(sysroot_path))
+
     if rctx.attr.supports_start_end_lib:
         link_flags.append("-Wl,--pop-state")
 
