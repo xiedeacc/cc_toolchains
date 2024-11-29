@@ -135,8 +135,6 @@ def _cc_toolchain_config_impl(rctx):
     conly_flags.append("-nostdinc")
     cxx_flags.append("-nostdinc")
     cxx_flags.append("-nostdinc++")
-    if rctx.attr.compiler != "gcc":
-        link_flags.append("-nostdlib")
 
     if rctx.attr.compiler == "clang":
         if rctx.attr.target_os == "linux":
@@ -269,9 +267,13 @@ def _cc_toolchain_config_impl(rctx):
         compile_flags.append("--target={}".format(rctx.attr.triple))
         link_flags.append("--target={}".format(rctx.attr.triple))
         if rctx.attr.target_os == "osx":
-            link_flags.append("{}lib/darwin/libc++.a".format(toolchain_path_prefix))
-            link_flags.append("{}lib/darwin/libc++abi.a".format(toolchain_path_prefix))
-            link_flags.append("{}lib/darwin/libunwind.a".format(toolchain_path_prefix))
+            link_flags.append("-nostdlib")
+            link_flags.append("-lc")
+            link_flags.append("-lm")
+            link_flags.append("{}lib/{}-darwin/libc++.a".format(toolchain_path_prefix, rctx.attr.target_arch))
+            link_flags.append("{}lib/{}-darwin/libc++abi.a".format(toolchain_path_prefix, rctx.attr.target_arch))
+            link_flags.append("{}lib/{}-darwin/libunwind.a".format(toolchain_path_prefix, rctx.attr.target_arch))
+
         elif rctx.attr.target_os == "linux":
             link_flags.append("{}lib/{}/libc++.a".format(toolchain_path_prefix, rctx.attr.triple))
             link_flags.append("{}lib/{}/libc++abi.a".format(toolchain_path_prefix, rctx.attr.triple))
