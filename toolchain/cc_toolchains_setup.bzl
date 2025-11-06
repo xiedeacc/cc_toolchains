@@ -140,7 +140,11 @@ def _cc_toolchain_config_impl(rctx):
         if rctx.attr.target_os == "linux":
             link_flags.append("-fuse-ld=lld")
     elif rctx.attr.compiler == "gcc":
-        link_flags.append("-fuse-ld=lld")
+        # Use BFD linker for musl builds, LLD for others
+        if rctx.attr.libc == "musl":
+            link_flags.append("-fuse-ld=bfd")
+        else:
+            link_flags.append("-fuse-ld=lld")
 
     archive_flags = []
     opt_link_flags = []
@@ -270,14 +274,18 @@ def _cc_toolchain_config_impl(rctx):
             link_flags.append("-nostdlib")
             link_flags.append("-lc")
             link_flags.append("-lm")
-            link_flags.append("{}lib/{}-darwin/libc++.a".format(toolchain_path_prefix, rctx.attr.target_arch))
-            link_flags.append("{}lib/{}-darwin/libc++abi.a".format(toolchain_path_prefix, rctx.attr.target_arch))
-            link_flags.append("{}lib/{}-darwin/libunwind.a".format(toolchain_path_prefix, rctx.attr.target_arch))
+            # For macOS builds, libraries are in x86_64-unknown-linux-gnu (host architecture)
+            lib_arch = "x86_64-unknown-linux-gnu"
+            link_flags.append("{}lib/{}/libc++.a".format(toolchain_path_prefix, lib_arch))
+            link_flags.append("{}lib/{}/libc++abi.a".format(toolchain_path_prefix, lib_arch))
+            link_flags.append("{}lib/{}/libunwind.a".format(toolchain_path_prefix, lib_arch))
 
         elif rctx.attr.target_os == "linux":
-            link_flags.append("{}lib/{}/libc++.a".format(toolchain_path_prefix, rctx.attr.triple))
-            link_flags.append("{}lib/{}/libc++abi.a".format(toolchain_path_prefix, rctx.attr.triple))
-            link_flags.append("{}lib/{}/libunwind.a".format(toolchain_path_prefix, rctx.attr.triple))
+            # For cross-compilation, use the host architecture library directory
+            lib_arch = "x86_64-unknown-linux-gnu" if rctx.attr.target_arch == "aarch64" else rctx.attr.triple
+            link_flags.append("{}lib/{}/libc++.a".format(toolchain_path_prefix, lib_arch))
+            link_flags.append("{}lib/{}/libc++abi.a".format(toolchain_path_prefix, lib_arch))
+            link_flags.append("{}lib/{}/libunwind.a".format(toolchain_path_prefix, lib_arch))
     elif rctx.attr.compiler == "gcc":
         link_flags.append("{}lib/libstdc++.a".format(sysroot_path))
         link_flags.append("{}lib/libstdc++fs.a".format(sysroot_path))
