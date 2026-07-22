@@ -20,6 +20,7 @@ _attrs = {
     "vendor": attr.string(mandatory = True),
     "libc": attr.string(mandatory = False, default = "glibc"),
     "compiler": attr.string(mandatory = True),
+    "cxx_runtime": attr.string(mandatory = False, default = ""),
     "triple": attr.string(mandatory = True),
     "url": attr.string(mandatory = True),
     "strip_prefix": attr.string(mandatory = False, default = ""),
@@ -76,9 +77,46 @@ select_file(
         toolchain_dir = _canonical_dir_path(rctx.attr.url) + rctx.attr.strip_prefix
         for path in rctx.path(toolchain_dir).readdir():
             rctx.execute(["cp", "-r", path, "."])
+        _ensure_lld_driver_name(rctx)
+        _ensure_libcxx_config_site(rctx)
         return rctx.attr
 
-    return _download(rctx)
+    updated_attrs = _download(rctx)
+    _ensure_lld_driver_name(rctx)
+    _ensure_libcxx_config_site(rctx)
+    return updated_attrs
+
+def _ensure_lld_driver_name(rctx):
+    if rctx.attr.target_os == "osx" or rctx.attr.target_os == "windows":
+        return
+
+    if rctx.path("bin/lld").exists and not rctx.path("bin/ld.lld").exists:
+        rctx.execute(["ln", "-s", "lld", "bin/ld.lld"])
+
+def _ensure_libcxx_config_site(rctx):
+    if rctx.attr.compiler != "clang" or rctx.attr.libc != "musl":
+        return
+
+    config_site = "include/c++/v1/__config_site"
+    if not rctx.path("include/c++/v1/__config").exists or rctx.path(config_site).exists:
+        return
+
+    rctx.file(
+        config_site,
+        content = """#ifndef _LIBCPP___CONFIG_SITE
+#define _LIBCPP___CONFIG_SITE
+
+#define _LIBCPP_ABI_VERSION 1
+#define _LIBCPP_ABI_NAMESPACE __1
+#define _LIBCPP_HAS_MUSL_LIBC
+#define _LIBCPP_HAS_NO_VENDOR_AVAILABILITY_ANNOTATIONS
+#define _LIBCPP_PSTL_CPU_BACKEND_THREAD
+#define _LIBCPP_HARDENING_MODE_DEFAULT 2
+
+#endif // _LIBCPP___CONFIG_SITE
+""",
+        executable = False,
+    )
 
 cc_toolchain_repo = repository_rule(
     attrs = _attrs,
@@ -273,7 +311,11 @@ def _cc_toolchain_config_impl(rctx):
             link_flags.append("{}lib/{}-darwin/libc++.a".format(toolchain_path_prefix, rctx.attr.target_arch))
             link_flags.append("{}lib/{}-darwin/libc++abi.a".format(toolchain_path_prefix, rctx.attr.target_arch))
             link_flags.append("{}lib/{}-darwin/libunwind.a".format(toolchain_path_prefix, rctx.attr.target_arch))
-
+        elif rctx.attr.cxx_runtime == "libstdc++":
+            link_flags.append("-lstdc++")
+            link_flags.append("-lstdc++fs")
+            link_flags.append("-lgcc")
+            link_flags.append("-lgcc_eh")
         elif rctx.attr.target_os == "linux":
             link_flags.append("{}lib/{}/libc++.a".format(toolchain_path_prefix, rctx.attr.triple))
             link_flags.append("{}lib/{}/libc++abi.a".format(toolchain_path_prefix, rctx.attr.triple))
@@ -408,6 +450,8 @@ def cc_toolchains_setup(name, **kwargs):
                 toolchain_args["vendor"] = target_toolchain_info.get("vendor")  #eg. pc
                 toolchain_args["libc"] = target_toolchain_info.get("libc")
                 toolchain_args["compiler"] = target_toolchain_info.get("compiler")  #eg. clang
+                if target_toolchain_info.get("cxx_runtime"):
+                    toolchain_args["cxx_runtime"] = target_toolchain_info.get("cxx_runtime")
                 toolchain_args["triple"] = target_toolchain_info.get("triple")  #eg. x86_64-linux-gnu
                 toolchain_args["url"] = target_toolchain_info.get("url")
 
