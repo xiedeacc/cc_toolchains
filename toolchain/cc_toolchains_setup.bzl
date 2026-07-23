@@ -79,11 +79,13 @@ select_file(
         for path in rctx.path(toolchain_dir).readdir():
             rctx.execute(["cp", "-r", path, "."])
         _ensure_lld_driver_name(rctx)
+        _ensure_clang_linux_runtime_aliases(rctx)
         _ensure_libcxx_config_site(rctx)
         return rctx.attr
 
     updated_attrs = _download(rctx)
     _ensure_lld_driver_name(rctx)
+    _ensure_clang_linux_runtime_aliases(rctx)
     _ensure_libcxx_config_site(rctx)
     return updated_attrs
 
@@ -94,30 +96,114 @@ def _ensure_lld_driver_name(rctx):
     if rctx.path("bin/lld").exists and not rctx.path("bin/ld.lld").exists:
         rctx.execute(["ln", "-s", "lld", "bin/ld.lld"])
 
+def _ensure_clang_linux_runtime_aliases(rctx):
+    if rctx.attr.compiler != "clang" or rctx.attr.target_os != "linux":
+        return
+
+    arch_runtime = "lib/clang/18/lib/{}/libclang_rt.builtins.a".format(rctx.attr.triple)
+    gnu_runtime = "lib/clang/18/lib/{}-unknown-linux-gnu/libclang_rt.builtins.a".format(rctx.attr.target_arch)
+    runtime = arch_runtime if rctx.path(arch_runtime).exists else gnu_runtime
+    if not rctx.path(runtime).exists:
+        return
+
+    linux_runtime_dir = "lib/clang/18/lib/linux"
+    linux_runtime = "{}/libclang_rt.builtins-{}.a".format(linux_runtime_dir, rctx.attr.target_arch)
+    if rctx.path(linux_runtime).exists:
+        return
+
+    rctx.execute(["mkdir", "-p", linux_runtime_dir])
+    rctx.execute(["ln", "-s", "../{}/libclang_rt.builtins.a".format(rctx.attr.triple), linux_runtime])
+    if not rctx.path(linux_runtime).exists and rctx.path(gnu_runtime).exists:
+        rctx.execute(["rm", "-f", linux_runtime])
+        rctx.execute(["ln", "-s", "../{}-unknown-linux-gnu/libclang_rt.builtins.a".format(rctx.attr.target_arch), linux_runtime])
+
 def _ensure_libcxx_config_site(rctx):
     if rctx.attr.compiler != "clang" or rctx.attr.libc != "musl":
         return
 
-    config_site = "include/c++/v1/__config_site"
-    if not rctx.path("include/c++/v1/__config").exists or rctx.path(config_site).exists:
-        return
+    cxx_lib_dir = "lib/{}".format(rctx.attr.triple)
+    gnu_cxx_lib_triple = "{}-unknown-linux-gnu".format(rctx.attr.target_arch)
+    gnu_cxx_lib_dir = "lib/{}".format(gnu_cxx_lib_triple)
+    if not rctx.path(cxx_lib_dir).exists and rctx.path(gnu_cxx_lib_dir).exists:
+        rctx.execute(["ln", "-s", gnu_cxx_lib_triple, cxx_lib_dir])
 
-    rctx.file(
-        config_site,
-        content = """#ifndef _LIBCPP___CONFIG_SITE
+    _ensure_musl_locale_compat_archive(rctx)
+
+    config_site_content = """#ifndef _LIBCPP___CONFIG_SITE
 #define _LIBCPP___CONFIG_SITE
 
 #define _LIBCPP_ABI_VERSION 1
 #define _LIBCPP_ABI_NAMESPACE __1
 #define _LIBCPP_HAS_MUSL_LIBC
 #define _LIBCPP_HAS_NO_VENDOR_AVAILABILITY_ANNOTATIONS
+#define _LIBCPP_PROVIDES_DEFAULT_RUNE_TABLE
 #define _LIBCPP_PSTL_CPU_BACKEND_THREAD
 #define _LIBCPP_HARDENING_MODE_DEFAULT 2
 
 #endif // _LIBCPP___CONFIG_SITE
-""",
+"""
+    cxx_config_dirs = ["include/c++/v1"]
+    arch_cxx_config_dir = "include/{}/c++/v1".format(gnu_cxx_lib_triple)
+    if rctx.path(arch_cxx_config_dir + "/__config_site").exists:
+        cxx_config_dirs.append(arch_cxx_config_dir)
+
+    for cxx_config_dir in cxx_config_dirs:
+        if not rctx.path(cxx_config_dir + "/__config").exists and not rctx.path(cxx_config_dir + "/__config_site").exists:
+            continue
+        rctx.file(
+            cxx_config_dir + "/__config_site",
+            content = config_site_content,
+            executable = False,
+        )
+
+def _ensure_musl_locale_compat_archive(rctx):
+    compat_archive = "lib/libmusl_locale_compat.a"
+    if rctx.path(compat_archive).exists:
+        return
+
+    compat_source = """typedef void *locale_t;
+
+extern long long strtoll(const char *, char **, int);
+extern unsigned long long strtoull(const char *, char **, int);
+extern int __cxa_atexit(void (*)(void *), void *, void *);
+
+long long strtoll_l(const char *nptr, char **endptr, int base, locale_t locale) {
+    (void)locale;
+    return strtoll(nptr, endptr, base);
+}
+
+unsigned long long strtoull_l(const char *nptr, char **endptr, int base, locale_t locale) {
+    (void)locale;
+    return strtoull(nptr, endptr, base);
+}
+
+int __cxa_thread_atexit_impl(void (*func)(void *), void *obj, void *dso_symbol) {
+    return __cxa_atexit(func, obj, dso_symbol);
+}
+"""
+    rctx.file(
+        "lib/musl_locale_compat.c",
+        content = compat_source,
         executable = False,
     )
+    rctx.execute([
+        "env",
+        "LD_LIBRARY_PATH=/root/src/software/toolchains/host-libs",
+        "./bin/clang",
+        "--target={}".format(rctx.attr.triple),
+        "-c",
+        "lib/musl_locale_compat.c",
+        "-o",
+        "lib/musl_locale_compat.o",
+    ])
+    rctx.execute([
+        "env",
+        "LD_LIBRARY_PATH=/root/src/software/toolchains/host-libs",
+        "./bin/llvm-ar",
+        "rcs",
+        compat_archive,
+        "lib/musl_locale_compat.o",
+    ])
 
 cc_toolchain_repo = repository_rule(
     attrs = _attrs,
@@ -349,6 +435,9 @@ def _cc_toolchain_config_impl(rctx):
                     link_flags.append(sysroot_lib)
                 else:
                     link_flags.append("{}lib/{}/{}".format(toolchain_path_prefix, rctx.attr.triple, lib))
+            musl_locale_compat = "{}lib/libmusl_locale_compat.a".format(toolchain_path_prefix)
+            if rctx.attr.libc == "musl" and _exists(rctx, musl_locale_compat):
+                link_flags.append(musl_locale_compat)
     elif rctx.attr.compiler == "gcc":
         link_flags.append("{}lib/libstdc++.a".format(sysroot_path))
         link_flags.append("{}lib/libstdc++fs.a".format(sysroot_path))
