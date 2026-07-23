@@ -36,6 +36,7 @@ _attrs = {
     "conly_flags": attr.string_list(mandatory = False),
     "cxx_flags": attr.string_list(mandatory = False),
     "link_flags": attr.string_list(mandatory = False),
+    "shared_link_flags": attr.string_list(mandatory = False),
     "archive_flags": attr.string_list(mandatory = False),
     "link_libs": attr.string_list(mandatory = False),
     "opt_compile_flags": attr.string_list(mandatory = False),
@@ -194,13 +195,13 @@ def _cc_toolchain_config_impl(rctx):
             link_flags.append("-resource-dir")
             link_flags.append(resource_dir)
         if rctx.attr.target_os == "linux":
-            link_flags.append("-nostartfiles")
             link_flags.append("-fuse-ld=lld")
     elif rctx.attr.compiler == "gcc":
         link_flags.append("-fuse-ld=lld")
 
     archive_flags = []
     opt_link_flags = []
+    shared_link_flags = []
     coverage_compile_flags = ["--coverage"]
     coverage_link_flags = ["--coverage"]
 
@@ -292,6 +293,8 @@ def _cc_toolchain_config_impl(rctx):
     lib_directories = [dir for dir in lib_directories if _exists(rctx, dir)]
     for item in lib_directories:
         link_flags.append("-L{}".format(item))
+        if rctx.attr.compiler == "clang":
+            link_flags.append("-B{}".format(item))
         if not _is_cross_compiling(rctx):
             link_flags.append("-Wl,-rpath,{}".format(item))
 
@@ -323,6 +326,8 @@ def _cc_toolchain_config_impl(rctx):
     if rctx.attr.compiler == "clang":
         compile_flags.append("--target={}".format(rctx.attr.triple))
         link_flags.append("--target={}".format(rctx.attr.triple))
+        if rctx.attr.target_os == "linux":
+            shared_link_flags.append("-nostartfiles")
         if rctx.attr.target_os == "osx":
             link_flags.append("-nostdlib")
             link_flags.append("-lc")
@@ -331,6 +336,8 @@ def _cc_toolchain_config_impl(rctx):
             link_flags.append("{}lib/{}-darwin/libc++abi.a".format(toolchain_path_prefix, rctx.attr.target_arch))
             link_flags.append("{}lib/{}-darwin/libunwind.a".format(toolchain_path_prefix, rctx.attr.target_arch))
         elif rctx.attr.cxx_runtime == "libstdc++":
+            link_flags.append("-stdlib=libstdc++")
+            link_flags.append("--rtlib=libgcc")
             link_flags.append("-lstdc++")
             link_flags.append("-lstdc++fs")
             link_flags.append("-lgcc")
@@ -362,6 +369,9 @@ def _cc_toolchain_config_impl(rctx):
     if rctx.attr.link_flags and len(rctx.attr.link_flags) != 0:
         link_flags.extend(rctx.attr.link_flags)
 
+    if rctx.attr.shared_link_flags and len(rctx.attr.shared_link_flags) != 0:
+        shared_link_flags.extend(rctx.attr.shared_link_flags)
+
     if rctx.attr.archive_flags and len(rctx.attr.archive_flags) != 0:
         archive_flags.extend(rctx.attr.archive_flags)
 
@@ -389,6 +399,7 @@ def _cc_toolchain_config_impl(rctx):
     compiler_configuration["conly_flags"] = _list_to_string(conly_flags)
     compiler_configuration["cxx_flags"] = _list_to_string(cxx_flags)
     compiler_configuration["link_flags"] = _list_to_string(link_flags)
+    compiler_configuration["shared_link_flags"] = _list_to_string(shared_link_flags)
     compiler_configuration["archive_flags"] = _list_to_string(archive_flags)
     compiler_configuration["link_libs"] = _list_to_string(link_libs)
     compiler_configuration["opt_link_flags"] = _list_to_string(opt_link_flags)
@@ -514,6 +525,8 @@ def cc_toolchains_setup(name, **kwargs):
 
                 if target_toolchain_info.get("link_flags"):
                     toolchain_args["link_flags"] = target_toolchain_info.get("link_flags")
+                if target_toolchain_info.get("shared_link_flags"):
+                    toolchain_args["shared_link_flags"] = target_toolchain_info.get("shared_link_flags")
 
                 if target_toolchain_info.get("archive_flags"):
                     toolchain_args["archive_flags"] = target_toolchain_info.get("archive_flags")

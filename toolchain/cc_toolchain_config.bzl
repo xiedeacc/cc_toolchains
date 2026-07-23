@@ -18,6 +18,7 @@ def cc_toolchain_config(
     conly_flags = []
     cxx_flags = []
     link_flags = []
+    shared_link_flags = []
     archive_flags = []
     link_libs = []
     opt_link_flags = []
@@ -42,6 +43,9 @@ def cc_toolchain_config(
 
     if compiler_configuration.get("link_flags") != None and len(compiler_configuration.get("link_flags")) != 0:
         link_flags.extend(compiler_configuration["link_flags"])
+
+    if compiler_configuration.get("shared_link_flags") != None and len(compiler_configuration.get("shared_link_flags")) != 0:
+        shared_link_flags.extend(compiler_configuration["shared_link_flags"])
 
     if compiler_configuration.get("archive_flags") != None and len(compiler_configuration.get("archive_flags")) != 0:
         archive_flags.extend(compiler_configuration["archive_flags"])
@@ -79,6 +83,7 @@ def cc_toolchain_config(
         conly_flags = conly_flags,
         cxx_flags = cxx_flags,
         link_flags = link_flags,
+        shared_link_flags = shared_link_flags,
         archive_flags = archive_flags,
         link_libs = link_libs,
         opt_link_flags = opt_link_flags,

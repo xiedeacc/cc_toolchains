@@ -776,6 +776,17 @@ def _impl(ctx):
                 ],
                 flag_groups = [flag_group(flags = ["-shared"])],
             ),
+            flag_set(
+                actions = [
+                    ACTION_NAMES.cpp_link_dynamic_library,
+                    ACTION_NAMES.cpp_link_nodeps_dynamic_library,
+                    ACTION_NAMES.lto_index_for_dynamic_library,
+                    ACTION_NAMES.lto_index_for_nodeps_dynamic_library,
+                ],
+                flag_groups = ([
+                    flag_group(flags = ctx.attr.shared_link_flags),
+                ] if ctx.attr.shared_link_flags else []),
+            ),
         ],
     )
 
@@ -1759,6 +1770,7 @@ cc_toolchain_config = rule(
         "conly_flags": attr.string_list(),
         "cxx_flags": attr.string_list(),
         "link_flags": attr.string_list(),
+        "shared_link_flags": attr.string_list(),
         "archive_flags": attr.string_list(),
         "link_libs": attr.string_list(),
         "opt_link_flags": attr.string_list(),
