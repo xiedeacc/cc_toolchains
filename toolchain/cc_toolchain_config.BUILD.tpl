@@ -89,6 +89,7 @@ toolchain(
     target_compatible_with = [
         "@platforms//cpu:%{target_arch}",
         "@platforms//os:%{target_os}",
+        "@cc_toolchains//toolchain:libc_%{libc}",
     ],
     toolchain = ":cc_toolchain-%{suffix}",
     toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
