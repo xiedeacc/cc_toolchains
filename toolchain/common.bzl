@@ -9,15 +9,18 @@ def canonical_dir_path(path):
         return path + "/"
     return path
 
+def starlark_string(s):
+    return "\"{}\"".format(s.replace("\\", "\\\\").replace("\"", "\\\""))
+
 def label_to_string(l):
     if l == None or len(str(l)) == 0:
         return ""
-    return "\"{}\",".format(str(l))
+    return "{},".format(starlark_string(str(l)))
 
 def list_to_string(ls):
     if ls == None:
         return "None"
-    return "[{}]".format(", ".join(["\"{}\"".format(d) for d in ls]))
+    return "[{}]".format(", ".join([starlark_string(d) for d in ls]))
 
 def dict_to_string(d):
     """Converts a dictionary to a string representation.
@@ -31,7 +34,7 @@ def dict_to_string(d):
         return "None"
     parts = []
     for key, value in d.items():
-        parts.append("\"{}\": {}".format(key, value))
+        parts.append("{}: {}".format(starlark_string(key), value))
     return "{%s}" % ", ".join(parts)
 
 def dict_key_to_string(d):
@@ -44,7 +47,7 @@ def dict_key_to_string(d):
     """
     if d == None:
         return "None"
-    return "[{}]".format(", ".join(["\"{}\"".format(k) for k in d.keys()]))
+    return "[{}]".format(", ".join([starlark_string(k) for k in d.keys()]))
 
 def is_cxx_search_path(path):
     if "/c++/" in path:
