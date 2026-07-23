@@ -194,6 +194,7 @@ def _cc_toolchain_config_impl(rctx):
             link_flags.append("-resource-dir")
             link_flags.append(resource_dir)
         if rctx.attr.target_os == "linux":
+            link_flags.append("-nostartfiles")
             link_flags.append("-fuse-ld=lld")
     elif rctx.attr.compiler == "gcc":
         link_flags.append("-fuse-ld=lld")
