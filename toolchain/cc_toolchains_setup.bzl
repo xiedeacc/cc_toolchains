@@ -200,9 +200,9 @@ def _cc_toolchain_config_impl(rctx):
     unfiltered_compile_flags = [
         "-no-canonical-prefixes",
         "-Wno-builtin-macro-redefined",
-        "-D__DATE__=redacted",
-        "-D__TIMESTAMP__=redacted",
-        "-D__TIME__=redacted",
+        "-D__DATE__=\"redacted\"",
+        "-D__TIMESTAMP__=\"redacted\"",
+        "-D__TIME__=\"redacted\"",
     ]
 
     system_include_directories = {}
