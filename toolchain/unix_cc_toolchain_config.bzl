@@ -30,6 +30,8 @@ load(
     "variable_with_value",
     "with_feature_set",
 )
+load("@rules_cc//cc/private/toolchain_config:cc_toolchain_config_info.bzl", "create_cc_toolchain_config_info")
+load("@rules_cc//cc/toolchains:cc_toolchain_config_info.bzl", "CcToolchainConfigInfo")
 
 def _target_os_version(ctx):
     platform_type = ctx.fragments.apple.single_arch_platform.platform_type
@@ -1720,7 +1722,7 @@ def _impl(ctx):
     if symbol_check:
         features.append(symbol_check)
 
-    return cc_common.create_cc_toolchain_config_info(
+    return create_cc_toolchain_config_info(
         ctx = ctx,
         features = features,
         action_configs = action_configs,

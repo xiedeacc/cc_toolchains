@@ -126,7 +126,10 @@ cc_toolchain_repo = repository_rule(
 
 def _cc_toolchain_config_impl(rctx):
     suffix = "{}_{}_{}_{}_{}".format(rctx.attr.compiler, rctx.attr.target_arch, rctx.attr.vendor, rctx.attr.target_os, rctx.attr.libc)
-    toolchain_repo_root = ("@" if BZLMOD_ENABLED else "") + "@cc_toolchain_repo_{}//".format(suffix)
+    if BZLMOD_ENABLED:
+        toolchain_repo_root = "@@+cc_toolchains_extension+cc_toolchain_repo_{}//".format(suffix)
+    else:
+        toolchain_repo_root = "@cc_toolchain_repo_{}//".format(suffix)
     toolchain_path_prefix = _canonical_dir_path(str(rctx.path(Label(toolchain_repo_root + ":BUILD.bazel")).dirname))
 
     sysroot_path = ""
