@@ -320,9 +320,12 @@ def _cc_toolchain_config_impl(rctx):
             link_flags.append("-lgcc")
             link_flags.append("-lgcc_eh")
         elif rctx.attr.target_os == "linux":
-            link_flags.append("{}lib/{}/libc++.a".format(toolchain_path_prefix, rctx.attr.triple))
-            link_flags.append("{}lib/{}/libc++abi.a".format(toolchain_path_prefix, rctx.attr.triple))
-            link_flags.append("{}lib/{}/libunwind.a".format(toolchain_path_prefix, rctx.attr.triple))
+            for lib in ["libc++.a", "libc++abi.a", "libunwind.a"]:
+                sysroot_lib = "{}lib/{}/{}".format(sysroot_path, rctx.attr.triple, lib)
+                if _exists(rctx, sysroot_lib):
+                    link_flags.append(sysroot_lib)
+                else:
+                    link_flags.append("{}lib/{}/{}".format(toolchain_path_prefix, rctx.attr.triple, lib))
     elif rctx.attr.compiler == "gcc":
         link_flags.append("{}lib/libstdc++.a".format(sysroot_path))
         link_flags.append("{}lib/libstdc++fs.a".format(sysroot_path))
