@@ -124,6 +124,15 @@ cc_toolchain_repo = repository_rule(
     implementation = _cc_toolchain_repo_impl,
 )
 
+def _clang_resource_dir(rctx, root_path, include_directories):
+    for item in include_directories:
+        include_dir = item if _is_absolute_path(item) else root_path + item
+        if item.endswith("/include") and "lib/clang/" in item:
+            resource_dir = include_dir[:-len("/include")]
+            if _exists(rctx, resource_dir):
+                return resource_dir
+    return ""
+
 def _cc_toolchain_config_impl(rctx):
     suffix = "{}_{}_{}_{}_{}".format(rctx.attr.compiler, rctx.attr.target_arch, rctx.attr.vendor, rctx.attr.target_os, rctx.attr.libc)
     if BZLMOD_ENABLED:
@@ -178,6 +187,12 @@ def _cc_toolchain_config_impl(rctx):
     cxx_flags.append("-nostdinc++")
 
     if rctx.attr.compiler == "clang":
+        resource_dir = _clang_resource_dir(rctx, sysroot_path, rctx.attr.sysroot_include_directories)
+        if resource_dir != "":
+            compile_flags.append("-resource-dir")
+            compile_flags.append(resource_dir)
+            link_flags.append("-resource-dir")
+            link_flags.append(resource_dir)
         if rctx.attr.target_os == "linux":
             link_flags.append("-fuse-ld=lld")
     elif rctx.attr.compiler == "gcc":
