@@ -296,6 +296,20 @@ def _impl(ctx):
         enabled = False,
     )
 
+    static_musl_executables_feature = feature(
+        name = "static_musl_executables",
+        enabled = ctx.attr.target_libc == "musl",
+        flag_sets = [
+            flag_set(
+                actions = [
+                    ACTION_NAMES.cpp_link_executable,
+                    ACTION_NAMES.lto_index_for_executable,
+                ],
+                flag_groups = [flag_group(flags = ["-static"])],
+            ),
+        ],
+    )
+
     default_compile_flags_feature = feature(
         name = "default_compile_flags",
         enabled = True,
@@ -1655,6 +1669,7 @@ def _impl(ctx):
             ubsan_feature,
             gcc_quoting_for_param_files_feature,
             static_link_cpp_runtimes_feature,
+            static_musl_executables_feature,
         ] + (
             [
                 supports_start_end_lib_feature,

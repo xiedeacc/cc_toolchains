@@ -26,6 +26,12 @@ _attrs = {
     "strip_prefix": attr.string(mandatory = False, default = ""),
     "sha256sum": attr.string(mandatory = False, default = ""),
     "sysroot": attr.string(mandatory = False),
+    "sysroot_files": attr.label(mandatory = False),
+    "runtime": attr.string(mandatory = False),
+    "runtime_files": attr.label(mandatory = False),
+    "runtime_resource_directory": attr.string(mandatory = False),
+    "runtime_include_directories": attr.string_list(mandatory = False),
+    "runtime_lib_directories": attr.string_list(mandatory = False),
     "tool_names": attr.string_dict(mandatory = True),
     "extra_compiler_files": attr.label(mandatory = False),
     "cxx_builtin_include_directories": attr.string_list(mandatory = False),
@@ -238,6 +244,15 @@ def _cc_toolchain_config_impl(rctx):
     if sysroot_path == "":
         fail("sysroot_path empty, set sysroot if cross compiling, else set to toolchain root")
 
+    runtime_path = ""
+    if rctx.attr.runtime and len(rctx.attr.runtime) > 0:
+        if _is_absolute_path(rctx.attr.runtime):
+            runtime_path = _canonical_dir_path(rctx.attr.runtime)
+        else:
+            runtime_path = _canonical_dir_path(str(rctx.path(Label(rctx.attr.runtime)).dirname))
+    if (rctx.attr.runtime_include_directories or rctx.attr.runtime_lib_directories) and runtime_path == "":
+        fail("runtime_path empty, set runtime when runtime directories are configured")
+
     compile_flags = [
         "-B{}bin".format(toolchain_path_prefix),
         "-U_FORTIFY_SOURCE",  # https://github.com/google/sanitizers/issues/247
@@ -262,7 +277,7 @@ def _cc_toolchain_config_impl(rctx):
         "-fdata-sections",
     ]
     conly_flags = []
-    cxx_flags = ["-std=c++17"]
+    cxx_flags = ["-std=c++20"]
     link_flags = [
         #"-v",
         "-B{}bin".format(toolchain_path_prefix),
@@ -274,7 +289,13 @@ def _cc_toolchain_config_impl(rctx):
     cxx_flags.append("-nostdinc++")
 
     if rctx.attr.compiler == "clang":
-        resource_dir = _clang_resource_dir(rctx, sysroot_path, rctx.attr.sysroot_include_directories)
+        resource_dir = ""
+        if rctx.attr.runtime_resource_directory:
+            resource_dir = rctx.attr.runtime_resource_directory if _is_absolute_path(rctx.attr.runtime_resource_directory) else runtime_path + rctx.attr.runtime_resource_directory
+            if not _exists(rctx, resource_dir):
+                fail("clang runtime resource directory does not exist: {}".format(resource_dir))
+        else:
+            resource_dir = _clang_resource_dir(rctx, sysroot_path, rctx.attr.sysroot_include_directories)
         if resource_dir != "":
             compile_flags.append("-resource-dir")
             compile_flags.append(resource_dir)
@@ -282,8 +303,6 @@ def _cc_toolchain_config_impl(rctx):
             link_flags.append(resource_dir)
         if rctx.attr.target_os == "linux":
             link_flags.append("-fuse-ld=lld")
-    elif rctx.attr.compiler == "gcc":
-        link_flags.append("-fuse-ld=lld")
 
     archive_flags = []
     opt_link_flags = []
@@ -311,6 +330,7 @@ def _cc_toolchain_config_impl(rctx):
     system_include_directories = {}
     c_builtin_include_directories = {}
     cxx_builtin_include_directories = {}
+    runtime_cxx_include_directories = {}
     for item in rctx.attr.cxx_builtin_include_directories:
         if _is_absolute_path(item):
             if _is_system_include_directory(rctx, item, rctx.attr.triple):
@@ -341,6 +361,13 @@ def _cc_toolchain_config_impl(rctx):
                 c_builtin_include_directories[sysroot_path + item] = True
             cxx_builtin_include_directories[sysroot_path + item] = True
 
+    for item in rctx.attr.runtime_include_directories:
+        include_dir = item if _is_absolute_path(item) else runtime_path + item
+        if not _is_cxx_search_path(item):
+            c_builtin_include_directories[include_dir] = True
+        cxx_builtin_include_directories[include_dir] = True
+        runtime_cxx_include_directories[include_dir] = True
+
     # Filter out non-existing directories but keep as dictionaries
     system_include_directories = {dir: True for dir in system_include_directories.keys() if _exists(rctx, dir)}
     c_builtin_include_directories = {dir: True for dir in c_builtin_include_directories.keys() if _exists(rctx, dir)}
@@ -352,9 +379,13 @@ def _cc_toolchain_config_impl(rctx):
         compile_flags.append("-idirafter")
         compile_flags.append(item)
 
-    for item in cxx_builtin_include_directories.keys():
+    for item in runtime_cxx_include_directories.keys():
         cxx_flags.append("-isystem")
         cxx_flags.append(item)
+    for item in cxx_builtin_include_directories.keys():
+        if item not in runtime_cxx_include_directories:
+            cxx_flags.append("-isystem")
+            cxx_flags.append(item)
     for item in system_include_directories.keys():
         compile_flags.append("-idirafter")
         compile_flags.append(item)
@@ -364,24 +395,32 @@ def _cc_toolchain_config_impl(rctx):
     cxx_builtin_include_directories = [dir for dir in cxx_builtin_include_directories.keys()]
 
     lib_directories = []
+    runtime_rpath_directories = []
     for item in rctx.attr.lib_directories:
         if _is_absolute_path(item):
             lib_directories.append(item)
+            runtime_rpath_directories.append(item)
         else:
             lib_directories.append(toolchain_path_prefix + item)
+            runtime_rpath_directories.append(toolchain_path_prefix + item)
     for item in rctx.attr.sysroot_lib_directories:
         if _is_absolute_path(item):
             lib_directories.append(item)
         else:
             lib_directories.append(sysroot_path + item)
+    for item in rctx.attr.runtime_lib_directories:
+        runtime_dir = item if _is_absolute_path(item) else runtime_path + item
+        lib_directories.append(runtime_dir)
+        runtime_rpath_directories.append(runtime_dir)
 
     lib_directories = [_canonical_dir_path(dir) for dir in lib_directories]
     lib_directories = [dir for dir in lib_directories if _exists(rctx, dir)]
+    runtime_rpath_directories = [_canonical_dir_path(dir) for dir in runtime_rpath_directories]
+    runtime_rpath_directories = [dir for dir in runtime_rpath_directories if _exists(rctx, dir)]
     for item in lib_directories:
         link_flags.append("-L{}".format(item))
-        if rctx.attr.compiler == "clang":
-            link_flags.append("-B{}".format(item))
-        if not _is_cross_compiling(rctx):
+        link_flags.append("-B{}".format(item))
+        if not _is_cross_compiling(rctx) and item in runtime_rpath_directories:
             link_flags.append("-Wl,-rpath,{}".format(item))
 
     link_flags.append("-B{}lib".format(sysroot_path))
@@ -424,23 +463,28 @@ def _cc_toolchain_config_impl(rctx):
         elif rctx.attr.cxx_runtime == "libstdc++":
             link_flags.append("-stdlib=libstdc++")
             link_flags.append("--rtlib=libgcc")
-            link_flags.append("-lstdc++")
-            link_flags.append("-lstdc++fs")
-            link_flags.append("-lgcc")
-            link_flags.append("-lgcc_eh")
+            link_libs.extend([
+                "-lstdc++",
+                "-lstdc++fs",
+                "-lgcc",
+                "-lgcc_eh",
+            ])
         elif rctx.attr.target_os == "linux":
-            for lib in ["libc++.a", "libc++abi.a", "libunwind.a"]:
-                sysroot_lib = "{}lib/{}/{}".format(sysroot_path, rctx.attr.triple, lib)
-                if _exists(rctx, sysroot_lib):
-                    link_flags.append(sysroot_lib)
-                else:
-                    link_flags.append("{}lib/{}/{}".format(toolchain_path_prefix, rctx.attr.triple, lib))
+            link_flags.append("-stdlib=libc++")
+            link_flags.append("--rtlib=compiler-rt")
+            link_flags.append("--unwindlib=libunwind")
+            link_libs.extend([
+                "-lc++",
+                "-lc++abi",
+            ])
             musl_locale_compat = "{}lib/libmusl_locale_compat.a".format(toolchain_path_prefix)
             if rctx.attr.libc == "musl" and _exists(rctx, musl_locale_compat):
-                link_flags.append(musl_locale_compat)
+                link_libs.append(musl_locale_compat)
     elif rctx.attr.compiler == "gcc":
-        link_flags.append("{}lib/libstdc++.a".format(sysroot_path))
-        link_flags.append("{}lib/libstdc++fs.a".format(sysroot_path))
+        link_libs.extend([
+            "-lstdc++",
+            "-lsupc++",
+        ])
 
     if rctx.attr.supports_start_end_lib:
         link_flags.append("-Wl,--pop-state")
@@ -510,6 +554,11 @@ def _cc_toolchain_config_impl(rctx):
         tool_paths[k] = "\"{}bin/{}\"".format(toolchain_path_prefix, v)
 
     extra_compiler_files = _label_to_string(rctx.attr.extra_compiler_files) if rctx.attr.extra_compiler_files else ""
+    target_files = extra_compiler_files
+    if rctx.attr.sysroot_files:
+        target_files += _label_to_string(rctx.attr.sysroot_files)
+    if rctx.attr.runtime_files:
+        target_files += _label_to_string(rctx.attr.runtime_files)
     repo_all_files_label_str = _label_to_string(Label(toolchain_repo_root + ":all_files"))
 
     windres_path = "\"\""
@@ -527,7 +576,7 @@ def _cc_toolchain_config_impl(rctx):
             "%{target_os}": rctx.attr.target_os,
             "%{libc}": rctx.attr.libc,
             "%{repo_all_files_label_str}": repo_all_files_label_str,
-            "%{extra_compiler_files}": extra_compiler_files,
+            "%{extra_compiler_files}": target_files,
             "%{cxx_builtin_include_directories}": _list_to_string(cxx_builtin_include_directories),
             "%{compiler_configuration}": _dict_to_string(compiler_configuration),
             "%{tool_paths}": _dict_to_string(tool_paths),
@@ -585,6 +634,18 @@ def cc_toolchains_setup(name, **kwargs):
 
                 if target_toolchain_info.get("sysroot"):
                     toolchain_args["sysroot"] = target_toolchain_info.get("sysroot")
+                if target_toolchain_info.get("sysroot_files"):
+                    toolchain_args["sysroot_files"] = target_toolchain_info.get("sysroot_files")
+                if target_toolchain_info.get("runtime"):
+                    toolchain_args["runtime"] = target_toolchain_info.get("runtime")
+                if target_toolchain_info.get("runtime_files"):
+                    toolchain_args["runtime_files"] = target_toolchain_info.get("runtime_files")
+                if target_toolchain_info.get("runtime_resource_directory"):
+                    toolchain_args["runtime_resource_directory"] = target_toolchain_info.get("runtime_resource_directory")
+                if target_toolchain_info.get("runtime_include_directories"):
+                    toolchain_args["runtime_include_directories"] = target_toolchain_info.get("runtime_include_directories")
+                if target_toolchain_info.get("runtime_lib_directories"):
+                    toolchain_args["runtime_lib_directories"] = target_toolchain_info.get("runtime_lib_directories")
 
                 toolchain_args["tool_names"] = target_toolchain_info.get("tool_names")
 
